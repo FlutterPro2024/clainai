@@ -19,7 +19,9 @@ load_dotenv()
 # API Keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
 SECRET_KEY = os.getenv("SECRET_KEY", "clainai-super-secret-key-2024")
-DB_PATH = os.getenv("DB_PATH", "clainai.db")
+
+# استخدام قاعدة بيانات في الذاكرة لـ Vercel
+DB_PATH = ":memory:"
 
 # GitHub OAuth Configuration
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "Ov23liW5Tjp0CGKyZiiA")
@@ -34,7 +36,7 @@ def get_base_url():
     if 'VERCEL' in os.environ:
         return 'https://clainai.vercel.app'
     else:
-        return 'https://clainai.vercel.app'  # دائماً يرجع للنتاج
+        return 'https://clainai.vercel.app'
 
 BASE_URL = get_base_url()
 GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
@@ -46,12 +48,14 @@ print("=" * 60)
 print("🚀 ClainAI - المساعد الذكي المتكامل!")
 print("=" * 60)
 print(f"📍 Base URL: {BASE_URL}")
+print(f"💾 Database: In-Memory SQLite")
 
 # Database functions
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DB_PATH, check_same_thread=False)
         g.db.row_factory = sqlite3.Row
+        init_db()  # تهيئة الجداول عند أول اتصال
     return g.db
 
 @app.teardown_appcontext
@@ -90,17 +94,8 @@ def init_db():
         )
     ''')
 
-    # إنشاء مستخدم مسؤول افتراضي إذا لم يكن موجوداً
-    c.execute("SELECT * FROM users WHERE email = ?", ("admin@clainai.com",))
-    if not c.fetchone():
-        password_hash = hashlib.sha256("clainai123".encode()).hexdigest()
-        c.execute(
-            "INSERT INTO users (email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
-            ("admin@clainai.com", "مدير النظام", password_hash, "admin", datetime.now(timezone.utc).isoformat())
-        )
-
     db.commit()
-    print("✅ تم إنشاء/تحديث قاعدة البيانات بنجاح")
+    print("✅ تم إنشاء قاعدة البيانات في الذاكرة بنجاح")
 
 # Routes
 @app.route("/")
@@ -865,12 +860,12 @@ def upload_file():
         # السماح بأنواع الملفات
         allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx'}
         if '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions:
-            # حفظ الملف
-            filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
-            upload_folder = "uploads"
+            # استخدام مجلد مؤقت لـ Vercel
+            upload_folder = "/tmp/uploads"
             if not os.path.exists(upload_folder):
                 os.makedirs(upload_folder)
             
+            filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
             file_path = os.path.join(upload_folder, filename)
             file.save(file_path)
 
@@ -1090,12 +1085,8 @@ if __name__ == "__main__":
     with app.app_context():
         init_db()
 
-        # الحصول على عنوان IP
-        hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
-
         print(f"📍 Production: {BASE_URL}")
-        print(f"📧 Developer: admin@clainai.com / clainai123")
+        print(f"📧 Developer: mohammedu3615@gmail.com")
         print("\n💫 **المميزات الرئيسية**:")
         print("   💬 محادثة ذكية وطبيعية")
         print("   🧠 فهم عميق للنية والسياق")
