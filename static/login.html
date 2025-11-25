@@ -1,0 +1,413 @@
+<!DOCTYPE html>                                    <html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClainAi - تسجيل الدخول</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        * {                                                    margin: 0;
+            padding: 0;
+            box-sizing: border-box;                        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .logo {
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #333;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .logo p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .oauth-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .oauth-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            background: white;
+            color: #333;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .oauth-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .oauth-btn.google {
+            border-color: #4285f4;
+            color: #4285f4;
+        }
+
+        .oauth-btn.google:hover {
+            background: #4285f4;
+            color: white;
+        }
+
+        .oauth-btn.github {
+            border-color: #333;
+            color: #333;
+        }
+
+        .oauth-btn.github:hover {
+            background: #333;
+            color: white;
+        }
+
+        .oauth-btn.facebook {
+            border-color: #1877f2;
+            color: #1877f2;
+        }
+
+        .oauth-btn.facebook:hover {
+            background: #1877f2;
+            color: white;
+        }
+
+        .oauth-btn span {
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 25px 0;
+            color: #666;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: #e0e0e0;
+        }
+
+        .divider span {
+            padding: 0 15px;
+            font-size: 0.9rem;
+        }
+
+        .guest-section {
+            margin-top: 25px;
+        }
+
+        .guest-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .guest-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .features {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+            text-align: right;
+        }
+
+        .features h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .features ul {
+            list-style: none;
+            text-align: right;
+        }
+
+        .features li {
+            padding: 8px 0;
+            color: #666;
+            position: relative;
+            padding-right: 25px;
+        }
+
+        .features li::before {
+            content: "✓";
+            position: absolute;
+            right: 0;
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            .logo h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>ClainAi</h1>
+            <p>مساعدك الذكي العربي المتكامل</p>
+        </div>
+
+        <!-- رسائل التنبيه -->
+        <div id="alert" class="alert"></div>
+
+        <!-- تحميل -->
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p style="text-align: center; margin-top: 10px; color: #666;">جاري المعالجة...</p>
+        </div>
+
+        <!-- أزرار OAuth -->
+        <div class="oauth-buttons">
+            <button class="oauth-btn google" onclick="loginWithGoogle()">
+                <span>G</span>
+                Google
+            </button>
+            <button class="oauth-btn github" onclick="loginWithGitHub()">
+                <span>⚡</span>
+                GitHub
+            </button>
+            <button class="oauth-btn facebook" onclick="loginWithFacebook()">
+                <span>f</span>
+                Facebook
+            </button>
+        </div>
+
+        <!-- فاصل -->
+        <div class="divider">
+            <span>أو</span>
+        </div>
+
+        <!-- دخول ضيف -->
+        <div class="guest-section">
+            <button class="guest-btn" onclick="loginAsGuest()">
+                الدخول كضيف
+            </button>
+        </div>
+
+        <!-- المميزات -->
+        <div class="features">
+            <h3>💫 المميزات المتاحة:</h3>
+            <ul>
+                <li>محادثة ذكية مع المساعد</li>
+                <li>دعم كامل للغة العربية</li>
+                <li>حفظ سجل المحادثات</li>
+                <li>تجربة مستخدم سلسة</li>
+                <li>دخول سريع وآمن</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // عرض رسائل التنبيه
+        function showAlert(message, type = 'info') {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert ${type}`;
+            alert.style.display = 'block';
+
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+
+        function showLoading(show = true) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function loginWithGitHub() {
+            showAlert('جاري الاتصال بـ GitHub...', 'info');
+            showLoading(true);
+            setTimeout(() => {
+                window.location.href = '/api/auth/github';
+            }, 1000);
+        }
+
+        function loginWithGoogle() {
+            showAlert('جاري الاتصال بـ Google...', 'info');
+            showLoading(true);
+            setTimeout(() => {
+                window.location.href = '/api/auth/google';
+            }, 1000);
+        }
+
+        function loginWithFacebook() {
+            showAlert('جاري الاتصال بـ Facebook...', 'info');
+            showLoading(true);
+            setTimeout(() => {
+                window.location.href = '/api/auth/facebook';
+            }, 1000);
+        }
+
+        async function loginAsGuest() {
+            showAlert('جاري إعداد الجلسة كضيف...', 'info');
+            showLoading(true);
+
+            try {
+                const response = await fetch('/api/guest-login', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert('تم الدخول كضيف بنجاح!', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1500);
+                } else {
+                    throw new Error(data.error || 'حدث خطأ أثناء الدخول كضيف');
+                }
+            } catch (error) {
+                showAlert(error.message, 'error');
+                showLoading(false);
+            }
+        }
+
+        function checkUrlErrors() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const error = urlParams.get('error');
+
+            if (error) {
+                const errorMessages = {
+                    'invalid_state': 'خطأ في التحقق من الأمان',
+                    'no_code': 'لم يتم استلام رمز المصادقة',
+                    'no_token': 'فشل في الحصول على رمز الوصول',
+                    'auth_failed': 'فشل في المصادقة',
+                    'user_save_failed': 'فشل في حفظ بيانات المستخدم'
+                };
+
+                showAlert(errorMessages[error] || `حدث خطأ: ${error}`, 'error');
+            }
+        }
+
+        function checkSuccessMessages() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const success = urlParams.get('success');
+
+            if (success) {
+                showAlert('تم تسجيل الدخول بنجاح!', 'success');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkUrlErrors();
+            checkSuccessMessages();
+
+            setTimeout(() => {
+                document.querySelector('.login-container').style.opacity = '1';
+                document.querySelector('.login-container').style.transform = 'translateY(0)';
+            }, 100);
+        });
+
+        document.querySelector('.login-container').style.opacity = '0';
+        document.querySelector('.login-container').style.transform = 'translateY(20px)';
+        document.querySelector('.login-container').style.transition = 'all 0.5s ease';
+    </script>
+</body>
+</html>
