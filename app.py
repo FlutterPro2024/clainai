@@ -28,7 +28,16 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "9c843fa45f6ea8abfc8277
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "77933091754-idsptg4osou4ipj9r434sdg8rpmb6289.apps.googleusercontent.com")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5000/api/auth/google/callback")
+
+# Auto-detect environment and set base URL
+def get_base_url():
+    if 'VERCEL' in os.environ:
+        return 'https://clainai.vercel.app'
+    else:
+        return 'https://clainai.vercel.app'  # دائماً يرجع للنتاج
+
+BASE_URL = get_base_url()
+GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = SECRET_KEY
@@ -36,6 +45,7 @@ app.secret_key = SECRET_KEY
 print("=" * 60)
 print("🚀 ClainAI - المساعد الذكي المتكامل!")
 print("=" * 60)
+print(f"📍 Base URL: {BASE_URL}")
 
 # Database functions
 def get_db():
@@ -133,7 +143,7 @@ def guest_login():
 
 **🚀 جرب هذه الأسئلة:**
 • "ما هو الذكاء الاصطناعي؟"
-• "كيف أتعلم البرمجة؟"
+• "كيف أتعلم البرمجة؟" 
 • "اشرح لي الحوسبة السحابية"
 
 استمتع! 😊"""
@@ -155,8 +165,8 @@ def github_login():
     state = secrets.token_urlsafe(16)
     session['github_oauth_state'] = state
 
-    # استخدام callback URL ثابت
-    callback_url = "http://localhost:5000/api/auth/github/callback"
+    # استخدام callback URL ديناميكي
+    callback_url = f"{BASE_URL}/api/auth/github/callback"
 
     print(f"📍 استخدام callback URL: {callback_url}")
 
@@ -198,8 +208,8 @@ def github_callback():
 
         print(f"✅ تم استلام code: {code}")
 
-        # استخدام callback URL ثابت
-        callback_url = "http://localhost:5000/api/auth/github/callback"
+        # استخدام callback URL ديناميكي
+        callback_url = f"{BASE_URL}/api/auth/github/callback"
 
         # استبدال code بـ access token
         token_data = {
@@ -355,8 +365,8 @@ def google_login():
     state = secrets.token_urlsafe(16)
     session['google_oauth_state'] = state
 
-    # استخدام redirect_uri ثابت
-    redirect_uri = 'http://localhost:5000/api/auth/google/callback'
+    # استخدام redirect_uri ديناميكي
+    redirect_uri = f"{BASE_URL}/api/auth/google/callback"
     print(f"📍 استخدام redirect_uri: {redirect_uri}")
 
     # معلمات طلب المصادقة
@@ -399,8 +409,8 @@ def google_callback():
 
         print(f"✅ تم استلام code: {code}")
 
-        # استخدام redirect_uri ثابت
-        redirect_uri = 'http://localhost:5000/api/auth/google/callback'
+        # استخدام redirect_uri ديناميكي
+        redirect_uri = f"{BASE_URL}/api/auth/google/callback"
 
         # استبدال code بـ access token
         token_data = {
@@ -667,7 +677,7 @@ def chat():
                 headers = {
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "http://localhost:5000",
+                    "HTTP-Referer": BASE_URL,
                     "X-Title": "ClainAI"
                 }
 
@@ -1008,7 +1018,7 @@ def debug_github():
         'status': 'ready',
         'client_id': GITHUB_CLIENT_ID,
         'client_secret_set': bool(GITHUB_CLIENT_SECRET),
-        'callback_url': "http://localhost:5000/api/auth/github/callback",
+        'callback_url': f"{BASE_URL}/api/auth/github/callback",
         'session_keys': list(session.keys())
     })
 
@@ -1019,7 +1029,7 @@ def debug_google():
         'status': 'ready',
         'client_id': GOOGLE_CLIENT_ID,
         'client_secret_set': bool(GOOGLE_CLIENT_SECRET),
-        'callback_url': "http://localhost:5000/api/auth/google/callback",
+        'callback_url': f"{BASE_URL}/api/auth/google/callback",
         'session_keys': list(session.keys())
     })
 
@@ -1084,8 +1094,7 @@ if __name__ == "__main__":
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
 
-        print(f"📍 Local: http://localhost:5000")
-        print(f"🌐 Network: http://{local_ip}:5000")
+        print(f"📍 Production: {BASE_URL}")
         print(f"📧 Developer: admin@clainai.com / clainai123")
         print("\n💫 **المميزات الرئيسية**:")
         print("   💬 محادثة ذكية وطبيعية")
@@ -1097,7 +1106,6 @@ if __name__ == "__main__":
         print("   🔐 تسجيل دخول بـ Google OAuth")
         print("   📎 رفع الملفات والصور")
         print("   📍 مشاركة الموقع")
-        print("\n📱 من جهاز آخر: http://{}:5000".format(local_ip))
         print("\n🔍 **جرب هذه الأسئلة الذكية**:")
         print("   - 'ما هو الذكاء الاصطناعي?' 🤖")
         print("   - 'اشرح الحوسبة السحابية' 🌐")
@@ -1105,4 +1113,6 @@ if __name__ == "__main__":
         print("   - 'من طورك?' 👨‍💻")
         print("   - 'من هو محمد عبدو?' 🎓")
 
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # تشغيل للسيرفر
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
