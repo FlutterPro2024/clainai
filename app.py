@@ -16,18 +16,18 @@ from werkzeug.utils import secure_filename
 # Load environment
 load_dotenv()
 
-# API Keys
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
-SECRET_KEY = os.getenv("SECRET_KEY", "clainai-super-secret-key-2024")
+# API Keys - استبدل بالمفاتيح الجديدة
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
+SECRET_KEY = os.getenv("SECRET_KEY", "clainai-super-secret-key-2024-pro-max")
 
 # استخدام قاعدة بيانات في الذاكرة لـ Vercel
-DB_PATH = ":memory:"
+DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else ":memory:"
 
-# GitHub OAuth Configuration
-GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "Ov23liW5Tjp0CGKyZiiA")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "9c843fa45f6ea8abfc82774b1395d98a3a925dee")
+# GitHub OAuth Configuration - تأكد من البيانات
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "Ov23lihMk0lVKB9t8CGm")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "your_github_client_secret_here")
 
-# Google OAuth Configuration
+# Google OAuth Configuration - صحح البيانات
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "77933091754-idsptg4osou4ipj9r434sdg8rpmb6289.apps.googleusercontent.com")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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")
 
@@ -36,26 +36,37 @@ def get_base_url():
     if 'VERCEL' in os.environ:
         return 'https://clainai.vercel.app'
     else:
-        return 'https://clainai.vercel.app'
+        return 'http://localhost:5000'
 
 BASE_URL = get_base_url()
+GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
 GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = SECRET_KEY
 
+# إعدادات الجلسة الآمنة
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=86400  # 24 ساعة
+)
+
 print("=" * 60)
-print("🚀 ClainAI - المساعد الذكي المتكامل!")
+print("🚀 ClainAI - المساعد الذكي المتكامل - الإصدار النهائي!")
 print("=" * 60)
 print(f"📍 Base URL: {BASE_URL}")
-print(f"💾 Database: In-Memory SQLite")
+print(f"💾 Database: {DB_PATH}")
+print(f"🔑 OpenRouter Key: {OPENROUTER_API_KEY[:20]}...")
+print(f"👑 Developer: محمد عبدو - mohammedu3615@gmail.com")
 
 # Database functions
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DB_PATH, check_same_thread=False)
         g.db.row_factory = sqlite3.Row
-        init_db()  # تهيئة الجداول عند أول اتصال
+        init_db()
     return g.db
 
 @app.teardown_appcontext
@@ -64,11 +75,11 @@ def close_db(error):
         g.db.close()
 
 def init_db():
-    """تهيئة قاعدة البيانات مع الجداول المطلوبة"""
+    """تهيئة قاعدة البيانات مع جداول محسنة"""
     db = get_db()
     c = db.cursor()
 
-    # جدول المستخدمين مع جميع الحقول المطلوبة
+    # جدول المستخدمين المحسن
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,363 +87,193 @@ def init_db():
             name TEXT,
             password_hash TEXT,
             role TEXT DEFAULT 'user',
-            created_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             oauth_provider TEXT,
             github_username TEXT,
-            last_login TEXT
+            github_id TEXT,
+            google_id TEXT,
+            avatar_url TEXT,
+            last_login TEXT,
+            is_active BOOLEAN DEFAULT 1
         )
     ''')
 
-    # جدول المحادثات
+    # جدول المحادثات المحسن
     c.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT NOT NULL,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
+            tokens_used INTEGER DEFAULT 0,
+            model_used TEXT,
             timestamp TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    db.commit()
-    print("✅ تم إنشاء قاعدة البيانات في الذاكرة بنجاح")
+    # جدول الإحصائيات الجديد
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS user_stats (
+            user_id INTEGER PRIMARY KEY,
+            total_messages INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            favorite_model TEXT,
+            last_activity TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
 
-# Routes
+    db.commit()
+    print("✅ تم إنشاء قاعدة البيانات المحسنة بنجاح")
+
+# ========== Routes المحسنة ==========
+
 @app.route("/")
 def index():
+    """الصفحة الرئيسية"""
     if "user_id" not in session:
         return redirect("/login")
     return send_from_directory("static", "index.html")
 
 @app.route("/login")
 def login_page():
+    """صفحة تسجيل الدخول"""
     return send_from_directory("static", "login.html")
 
 @app.route("/static/<path:path>")
 def serve_static(path):
+    """خدمة الملفات الثابتة"""
     return send_from_directory("static", path)
 
-# Authentication routes
+# ========== نظام المصادقة المحسن ==========
+
 @app.route("/api/guest-login")
 def guest_login():
-    """دخول ضيف مع تجربة كاملة"""
+    """دخول ضيف محسن"""
     try:
         guest_id = f"guest_{secrets.token_hex(12)}"
-
+        
+        session.clear()
         session["user_id"] = guest_id
-        session["user_role"] = "user"
-        session["user_name"] = "ضيف"
+        session["user_role"] = "guest"
+        session["user_name"] = "ضيف ClainAI"
         session["user_email"] = f"guest_{secrets.token_hex(6)}@clainai.com"
         session["oauth_provider"] = "guest"
+        session.permanent = True
 
-        # رسالة ترحيب
+        # رسالة ترحيب ذكية
         session_id = f"user_{guest_id}"
-        welcome_message = """🎉 **مرحباً بك كضيف!** 🌟
+        welcome_message = """🎉 **مرحباً بك في ClainAI!** 🌟
 
-استمتع بتجربة ClainAI الكاملة بدون إنشاء حساب.
+أنت الآن تستخدم النسخة الكاملة من المساعد الذكي العربي المتكامل.
 
-**💫 يمكنك:**
-- محادثة ذكية مع المساعد
-- تجربة جميع المميزات
-- طرح أي سؤال في أي مجال
+**👨‍💻 المطور:** محمد عبدو  
+**📧 البريد:** mohammedu3615@gmail.com  
+**🎓 الخلفية:** خريج تكنولوجيا المعلومات والاتصالات
 
-**🚀 جرب هذه الأسئلة:**
-• "ما هو الذكاء الاصطناعي؟"
-• "كيف أتعلم البرمجة؟" 
-• "اشرح لي الحوسبة السحابية"
+**💫 المميزات المتاحة لك:**
+- 🧠 محادثة ذكية مع أنظمة AI متعددة
+- 📚 إجابات مفصلة وشاملة
+- 🌍 دعم كامل للغة العربية
+- 💾 حفظ سجل المحادثات
+- 📎 مشاركة الملفات والصور
+- 📍 مشاركة الموقع
 
-استمتع! 😊"""
+**🚀 جرب هذه الأسئلة الذكية:**
+• "ما هو الذكاء الاصطناعي وكيف يعمل؟"
+• "كيف أبدأ في تعلم البرمجة خطوة بخطوة؟"
+• "اشرح لي الحوسبة السحابية بمثال عملي"
+• "ما هي أحدث تقنيات الويب في 2024؟"
+• "كيف أطور تطبيق ويب متكامل؟"
+
+استمتع بتجربتك! 😊"""
 
         save_message(session_id, "assistant", welcome_message)
 
-        return jsonify({"success": True, "redirect": "/"})
+        return jsonify({
+            "success": True, 
+            "message": "تم الدخول كضيف بنجاح",
+            "user": session["user_name"],
+            "redirect": "/"
+        })
 
     except Exception as e:
-        return jsonify({"error": f"حدث خطأ: {str(e)}"}), 500
+        return jsonify({"error": f"حدث خطأ في الدخول: {str(e)}"}), 500
 
-# GitHub OAuth Routes
+# ========== GitHub OAuth المحسن ==========
+
 @app.route('/api/auth/github')
 def github_login():
-    """بدء عملية تسجيل الدخول بـ GitHub"""
-    print("🚀 بدء عملية GitHub OAuth...")
+    """بدء عملية تسجيل الدخول بـ GitHub محسنة"""
+    print("🚀 بدء عملية GitHub OAuth المحسنة...")
 
-    # إنشاء state عشوائي لمنع هجمات CSRF
-    state = secrets.token_urlsafe(16)
-    session['github_oauth_state'] = state
+    # إنشاء state عشوائي آمن
+    state = secrets.token_urlsafe(32)
+    session['oauth_state'] = state
+    session['oauth_provider'] = 'github'
 
-    # استخدام callback URL ديناميكي
-    callback_url = f"{BASE_URL}/api/auth/github/callback"
-
-    print(f"📍 استخدام callback URL: {callback_url}")
-
-    # معلمات طلب المصادقة
+    # بناء رابط المصادقة
     params = {
         'client_id': GITHUB_CLIENT_ID,
-        'redirect_uri': callback_url,
-        'scope': 'user:email',
+        'redirect_uri': GITHUB_REDIRECT_URI,
+        'scope': 'user:email read:user',
         'state': state,
         'allow_signup': 'true'
     }
 
-    # إعادة التوجيه لـ GitHub
     auth_url = f"https://github.com/login/oauth/authorize?{'&'.join([f'{k}={v}' for k, v in params.items()])}"
-    print(f"🔗 رابط المصادقة: {auth_url}")
+    print(f"🔗 رابط GitHub OAuth: {auth_url}")
     return redirect(auth_url)
 
 @app.route('/api/auth/github/callback')
 def github_callback():
-    """معالجة رد GitHub"""
+    """معالجة رد GitHub محسنة"""
     try:
         print("🔄 معالجة رد GitHub OAuth...")
 
         # التحقق من state
-        stored_state = session.get('github_oauth_state')
+        stored_state = session.get('oauth_state')
         received_state = request.args.get('state')
 
-        print(f"🔍 State - المخزن: {stored_state}, المستلم: {received_state}")
-
-        if stored_state != received_state:
-            print("❌ State غير متطابق!")
+        if not stored_state or stored_state != received_state:
+            print("❌ State غير متطابق أو منتهي!")
             return redirect('/login?error=invalid_state')
 
-        # الحصول على code من GitHub
+        # الحصول على code
         code = request.args.get('code')
         if not code:
             print("❌ لا يوجد code في الرد")
             return redirect('/login?error=no_code')
 
-        print(f"✅ تم استلام code: {code}")
-
-        # استخدام callback URL ديناميكي
-        callback_url = f"{BASE_URL}/api/auth/github/callback"
+        print(f"✅ تم استلام code من GitHub")
 
         # استبدال code بـ access token
         token_data = {
             'client_id': GITHUB_CLIENT_ID,
             'client_secret': GITHUB_CLIENT_SECRET,
             'code': code,
-            'redirect_uri': callback_url
+            'redirect_uri': GITHUB_REDIRECT_URI
         }
 
-        headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        }
+        token_response = requests.post(
+            'https://github.com/login/oauth/access_token',
+            json=token_data,
+            headers={'Accept': 'application/json'},
+            timeout=30
+        )
 
-        print("🔄 جاري طلب access token...")
-        token_response = requests.post('https://github.com/login/oauth/access_token', json=token_data, headers=headers)
+        if token_response.status_code != 200:
+            print(f"❌ خطأ في الحصول على token: {token_response.text}")
+            return redirect('/login?error=token_failed')
+
         token_json = token_response.json()
+        access_token = token_json.get('access_token')
 
-        print(f"📨 رد token: {token_json}")
-
-        if 'access_token' not in token_json:
+        if not access_token:
             print("❌ لم يتم استلام access token")
             return redirect('/login?error=no_token')
 
-        access_token = token_json['access_token']
-        print(f"✅ تم الحصول على access token: {access_token[:10]}...")
-
-        # الحصول على بيانات المستخدم
-        user_headers = {
-            'Authorization': f'token {access_token}',
-            'Accept': 'application/json'
-        }
-
-        # بيانات المستخدم الأساسية
-        print("🔄 جاري طلب بيانات المستخدم...")
-        user_response = requests.get('https://api.github.com/user', headers=user_headers)
-        user_data = user_response.json()
-
-        # الحصول على البريد الإلكتروني
-        email_response = requests.get('https://api.github.com/user/emails', headers=user_headers)
-        email_data = email_response.json()
-
-        # البحث عن البريد الأساسي
-        primary_email = next((email['email'] for email in email_data if email['primary']), None)
-        if not primary_email:
-            primary_email = user_data.get('email', f"github_{user_data['id']}@clainai.com")
-
-        print(f"✅ البريد الأساسي: {primary_email}")
-
-        # تجهيز بيانات المستخدم
-        user_info = {
-            'id': str(user_data['id']),
-            'name': user_data.get('name', user_data.get('login', 'مستخدم GitHub')),
-            'email': primary_email,
-            'avatar': user_data.get('avatar_url'),
-            'username': user_data.get('login'),
-            'provider': 'github'
-        }
-
-        print(f"🎯 بيانات المستخدم النهائية: {user_info}")
-
-        # معالجة المستخدم
-        return handle_github_user(user_info)
-
-    except Exception as e:
-        print(f"❌ GitHub OAuth Error: {e}")
-        return redirect('/login?error=auth_failed')
-
-def handle_github_user(user_data):
-    """حفظ وتجهيز بيانات مستخدم GitHub"""
-    try:
-        db = get_db()
-        c = db.cursor()
-
-        print(f"💾 حفظ بيانات المستخدم: {user_data['email']}")
-
-        # البحث عن المستخدم بالبريد الإلكتروني
-        c.execute("SELECT * FROM users WHERE email = ?", (user_data['email'],))
-        existing_user = c.fetchone()
-
-        if existing_user:
-            # تحديث المستخدم الحالي
-            user_id = existing_user['id']
-            print(f"🔄 تحديث مستخدم موجود: {user_id}")
-            c.execute(
-                "UPDATE users SET name = ?, last_login = ?, oauth_provider = ?, github_username = ? WHERE id = ?",
-                (user_data['name'], datetime.now(timezone.utc).isoformat(), 'github', user_data.get('username'), user_id)
-            )
-        else:
-            # إنشاء مستخدم جديد
-            password_hash = hashlib.sha256(secrets.token_hex(32).encode()).hexdigest()
-            print(f"🆕 إنشاء مستخدم جديد: {user_data['email']}")
-            c.execute(
-                """INSERT INTO users
-                (email, name, password_hash, role, created_at, oauth_provider, github_username)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (user_data['email'], user_data['name'], password_hash, 'user',
-                 datetime.now(timezone.utc).isoformat(), 'github', user_data.get('username'))
-            )
-            user_id = c.lastrowid
-
-        db.commit()
-
-        # حفظ في الجلسة
-        session["user_id"] = user_id
-        session["user_email"] = user_data['email']
-        session["user_name"] = user_data['name']
-        session["user_role"] = 'user'
-        session["oauth_provider"] = 'github'
-        session["github_username"] = user_data.get('username')
-
-        print(f"✅ تم حفظ الجلسة - user_id: {user_id}")
-
-        # تنظيف state
-        session.pop('github_oauth_state', None)
-
-        # رسالة ترحيب
-        session_id = f"user_{user_id}"
-        welcome_message = f"""🎉 **مرحباً بك {user_data['name'] or user_data['username']}!** 🌟
-
-تم تسجيل دخولك بنجاح باستخدام GitHub.
-
-**👤 معلومات حسابك:**
-- البريد: {user_data['email']}
-- اسم المستخدم: @{user_data.get('username', 'غير معروف')}
-
-**💫 المميزات المتاحة:**
-- محادثة ذكية مع ClainAI
-- حفظ سجل المحادثات
-- تجربة كاملة لجميع المميزات
-
-**🚀 ابدأ رحلتك المعرفية!**
-اسألني عن أي شيء وسأجيبك بذكاء! 😊"""
-
-        if not has_welcome_message(session_id):
-            save_message(session_id, "assistant", welcome_message)
-
-        print("✅ تم تسجيل الدخول بنجاح!")
-        return redirect('/')
-
-    except Exception as e:
-        print(f"❌ GitHub User Handling Error: {e}")
-        return redirect('/login?error=user_save_failed')
-
-# Google OAuth Routes
-@app.route('/api/auth/google')
-def google_login():
-    """بدء عملية تسجيل الدخول بـ Google"""
-    print("🚀 بدء عملية Google OAuth...")
-    print(f"🔑 Using Client ID: {GOOGLE_CLIENT_ID}")
-
-    # إنشاء state عشوائي لمنع هجمات CSRF
-    state = secrets.token_urlsafe(16)
-    session['google_oauth_state'] = state
-
-    # استخدام redirect_uri ديناميكي
-    redirect_uri = f"{BASE_URL}/api/auth/google/callback"
-    print(f"📍 استخدام redirect_uri: {redirect_uri}")
-
-    # معلمات طلب المصادقة
-    params = {
-        'client_id': GOOGLE_CLIENT_ID,
-        'redirect_uri': redirect_uri,
-        'response_type': 'code',
-        'scope': 'openid email profile',
-        'state': state,
-        'access_type': 'offline',
-        'prompt': 'consent'
-    }
-
-    # إعادة التوجيه لـ Google
-    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{'&'.join([f'{k}={v}' for k, v in params.items()])}"
-    print(f"🔗 رابط المصادقة: {auth_url}")
-    return redirect(auth_url)
-
-@app.route('/api/auth/google/callback')
-def google_callback():
-    """معالجة رد Google"""
-    try:
-        print("🔄 معالجة رد Google OAuth...")
-
-        # التحقق من state
-        stored_state = session.get('google_oauth_state')
-        received_state = request.args.get('state')
-
-        print(f"🔍 State - المخزن: {stored_state}, المستلم: {received_state}")
-
-        if stored_state != received_state:
-            print("❌ State غير متطابق!")
-            return redirect('/login?error=invalid_state')
-
-        # الحصول على code من Google
-        code = request.args.get('code')
-        if not code:
-            print("❌ لا يوجد code في الرد")
-            return redirect('/login?error=no_code')
-
-        print(f"✅ تم استلام code: {code}")
-
-        # استخدام redirect_uri ديناميكي
-        redirect_uri = f"{BASE_URL}/api/auth/google/callback"
-
-        # استبدال code بـ access token
-        token_data = {
-            'client_id': GOOGLE_CLIENT_ID,
-            'client_secret': GOOGLE_CLIENT_SECRET,
-            'code': code,
-            'grant_type': 'authorization_code',
-            'redirect_uri': redirect_uri
-        }
-
-        headers = {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-
-        print("🔄 جاري طلب access token...")
-        token_response = requests.post('https://oauth2.googleapis.com/token', data=token_data, headers=headers)
-        token_json = token_response.json()
-
-        print(f"📨 رد token: {token_json}")
-
-        if 'access_token' not in token_json:
-            print("❌ لم يتم استلام access token")
-            print(f"📝 تفاصيل الخطأ: {token_json}")
-            return redirect('/login?error=no_token')
-
-        access_token = token_json['access_token']
-        print(f"✅ تم الحصول على access token: {access_token[:10]}...")
+        print(f"✅ تم الحصول على access token من GitHub")
 
         # الحصول على بيانات المستخدم
         user_headers = {
@@ -441,161 +282,243 @@ def google_callback():
         }
 
         # بيانات المستخدم الأساسية
-        print("🔄 جاري طلب بيانات المستخدم...")
-        user_response = requests.get('https://www.googleapis.com/oauth2/v2/userinfo', headers=user_headers)
+        user_response = requests.get('https://api.github.com/user', headers=user_headers)
+        if user_response.status_code != 200:
+            print("❌ خطأ في بيانات المستخدم")
+            return redirect('/login?error=user_info_failed')
+
         user_data = user_response.json()
 
-        print(f"👤 بيانات المستخدم: {user_data}")
+        # الحصول على البريد الإلكتروني
+        email_response = requests.get('https://api.github.com/user/emails', headers=user_headers)
+        email_data = email_response.json() if email_response.status_code == 200 else []
 
-        if 'error' in user_data:
-            print(f"❌ خطأ في بيانات المستخدم: {user_data['error']}")
-            return redirect('/login?error=user_info_failed')
+        # البحث عن البريد الأساسي
+        primary_email = next((email['email'] for email in email_data if email['primary']), None)
+        if not primary_email:
+            primary_email = user_data.get('email', f"github_{user_data['id']}@clainai.com")
 
         # تجهيز بيانات المستخدم
         user_info = {
-            'id': str(user_data['id']),
-            'name': user_data.get('name', 'مستخدم Google'),
-            'email': user_data.get('email', f"google_{user_data['id']}@clainai.com"),
-            'avatar': user_data.get('picture'),
-            'provider': 'google'
+            'github_id': str(user_data['id']),
+            'name': user_data.get('name', user_data.get('login', 'مستخدم GitHub')),
+            'email': primary_email,
+            'avatar_url': user_data.get('avatar_url'),
+            'username': user_data.get('login'),
+            'bio': user_data.get('bio'),
+            'location': user_data.get('location'),
+            'blog': user_data.get('blog')
         }
 
-        print(f"🎯 بيانات المستخدم النهائية: {user_info}")
+        print(f"✅ بيانات مستخدم GitHub: {user_info['name']} ({user_info['email']})")
 
-        # معالجة المستخدم
-        return handle_google_user(user_info)
+        # حفظ المستخدم في قاعدة البيانات
+        return handle_oauth_user(user_info, 'github')
 
     except Exception as e:
-        print(f"❌ Google OAuth Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ خطأ في GitHub OAuth: {e}")
         return redirect('/login?error=auth_failed')
 
-def handle_google_user(user_data):
-    """حفظ وتجهيز بيانات مستخدم Google"""
+# ========== Google OAuth المحسن ==========
+
+@app.route('/api/auth/google')
+def google_login():
+    """بدء عملية تسجيل الدخول بـ Google محسنة"""
+    print("🚀 بدء عملية Google OAuth المحسنة...")
+
+    # إنشاء state عشوائي آمن
+    state = secrets.token_urlsafe(32)
+    session['oauth_state'] = state
+    session['oauth_provider'] = 'google'
+
+    # بناء رابط المصادقة
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'offline',
+        'prompt': 'consent'
+    }
+
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{'&'.join([f'{k}={v}' for k, v in params.items()])}"
+    print(f"🔗 رابط Google OAuth: {auth_url}")
+    return redirect(auth_url)
+
+@app.route('/api/auth/google/callback')
+def google_callback():
+    """معالجة رد Google محسنة"""
+    try:
+        print("🔄 معالجة رد Google OAuth...")
+
+        # التحقق من state
+        stored_state = session.get('oauth_state')
+        received_state = request.args.get('state')
+
+        if not stored_state or stored_state != received_state:
+            print("❌ State غير متطابق أو منتهي!")
+            return redirect('/login?error=invalid_state')
+
+        # الحصول على code
+        code = request.args.get('code')
+        if not code:
+            print("❌ لا يوجد code في الرد")
+            return redirect('/login?error=no_code')
+
+        print(f"✅ تم استلام code من Google")
+
+        # استبدال code بـ access token
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': GOOGLE_REDIRECT_URI
+        }
+
+        token_response = requests.post(
+            'https://oauth2.googleapis.com/token',
+            data=token_data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            timeout=30
+        )
+
+        if token_response.status_code != 200:
+            print(f"❌ خطأ في الحصول على token: {token_response.text}")
+            return redirect('/login?error=token_failed')
+
+        token_json = token_response.json()
+        access_token = token_json.get('access_token')
+
+        if not access_token:
+            print("❌ لم يتم استلام access token")
+            return redirect('/login?error=no_token')
+
+        print(f"✅ تم الحصول على access token من Google")
+
+        # الحصول على بيانات المستخدم
+        user_headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Accept': 'application/json'
+        }
+
+        user_response = requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo', 
+            headers=user_headers
+        )
+
+        if user_response.status_code != 200:
+            print("❌ خطأ في بيانات المستخدم")
+            return redirect('/login?error=user_info_failed')
+
+        user_data = user_response.json()
+
+        # تجهيز بيانات المستخدم
+        user_info = {
+            'google_id': str(user_data['id']),
+            'name': user_data.get('name', 'مستخدم Google'),
+            'email': user_data.get('email', f"google_{user_data['id']}@clainai.com"),
+            'avatar_url': user_data.get('picture'),
+            'locale': user_data.get('locale', 'ar')
+        }
+
+        print(f"✅ بيانات مستخدم Google: {user_info['name']} ({user_info['email']})")
+
+        # حفظ المستخدم في قاعدة البيانات
+        return handle_oauth_user(user_info, 'google')
+
+    except Exception as e:
+        print(f"❌ خطأ في Google OAuth: {e}")
+        return redirect('/login?error=auth_failed')
+
+def handle_oauth_user(user_data, provider):
+    """حفظ وتجهيز بيانات مستخدم OAuth"""
     try:
         db = get_db()
         c = db.cursor()
 
-        print(f"💾 حفظ بيانات المستخدم: {user_data['email']}")
+        # تحديد معرف المستخدم بناءً على المزود
+        user_id_field = f'{provider}_id'
+        user_id_value = user_data.get(user_id_field)
+        
+        if not user_id_value:
+            print(f"❌ لا يوجد {user_id_field} في بيانات المستخدم")
+            return redirect('/login?error=invalid_user_data')
 
-        # البحث عن المستخدم بالبريد الإلكتروني
-        c.execute("SELECT * FROM users WHERE email = ?", (user_data['email'],))
+        # البحث عن المستخدم بالبريد أو المعرف
+        c.execute(
+            f"SELECT * FROM users WHERE email = ? OR {user_id_field} = ?", 
+            (user_data['email'], user_id_value)
+        )
         existing_user = c.fetchone()
 
         if existing_user:
             # تحديث المستخدم الحالي
             user_id = existing_user['id']
             print(f"🔄 تحديث مستخدم موجود: {user_id}")
-            c.execute(
-                "UPDATE users SET name = ?, last_login = ?, oauth_provider = ? WHERE id = ?",
-                (user_data['name'], datetime.now(timezone.utc).isoformat(), 'google', user_id)
-            )
+            c.execute(f"""
+                UPDATE users SET 
+                name = ?, avatar_url = ?, last_login = ?, oauth_provider = ?, 
+                {user_id_field} = ?, is_active = 1 
+                WHERE id = ?
+            """, (
+                user_data['name'], user_data.get('avatar_url'), 
+                datetime.now(timezone.utc).isoformat(), provider,
+                user_id_value, user_id
+            ))
         else:
             # إنشاء مستخدم جديد
             password_hash = hashlib.sha256(secrets.token_hex(32).encode()).hexdigest()
             print(f"🆕 إنشاء مستخدم جديد: {user_data['email']}")
-            c.execute(
-                """INSERT INTO users
-                (email, name, password_hash, role, created_at, oauth_provider)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-                (user_data['email'], user_data['name'], password_hash, 'user',
-                 datetime.now(timezone.utc).isoformat(), 'google')
-            )
+            c.execute(f"""
+                INSERT INTO users 
+                (email, name, password_hash, role, created_at, oauth_provider, 
+                 {user_id_field}, avatar_url, last_login, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, (
+                user_data['email'], user_data['name'], password_hash, 'user',
+                datetime.now(timezone.utc).isoformat(), provider,
+                user_id_value, user_data.get('avatar_url'),
+                datetime.now(timezone.utc).isoformat()
+            ))
             user_id = c.lastrowid
+
+            # إنشاء إحصائيات للمستخدم الجديد
+            c.execute(
+                "INSERT OR IGNORE INTO user_stats (user_id) VALUES (?)",
+                (user_id,)
+            )
 
         db.commit()
 
         # حفظ في الجلسة
+        session.clear()
         session["user_id"] = user_id
         session["user_email"] = user_data['email']
         session["user_name"] = user_data['name']
         session["user_role"] = 'user'
-        session["oauth_provider"] = 'google'
-
-        print(f"✅ تم حفظ الجلسة - user_id: {user_id}")
+        session["oauth_provider"] = provider
+        session["avatar_url"] = user_data.get('avatar_url')
+        session.permanent = True
 
         # تنظيف state
-        session.pop('google_oauth_state', None)
+        session.pop('oauth_state', None)
 
-        # رسالة ترحيب
-        session_id = f"user_{user_id}"
-        welcome_message = f"""🎉 **مرحباً بك {user_data['name']}!** 🌟
+        print(f"✅ تم تسجيل دخول المستخدم: {user_data['name']} (ID: {user_id})")
 
-تم تسجيل دخولك بنجاح باستخدام Google.
-
-**👤 معلومات حسابك:**
-- البريد: {user_data['email']}
-- طريقة الدخول: حساب Google
-
-**💫 المميزات المتاحة:**
-- محادثة ذكية مع ClainAI
-- حفظ سجل المحادثات
-- تجربة كاملة لجميع المميزات
-
-**🚀 ابدأ رحلتك المعرفية!**
-اسألني عن أي شيء وسأجيبك بذكاء! 😊"""
-
-        if not has_welcome_message(session_id):
-            save_message(session_id, "assistant", welcome_message)
-
-        print("✅ تم تسجيل الدخول بنجاح!")
+        # إعادة التوجيه للصفحة الرئيسية
         return redirect('/')
 
     except Exception as e:
-        print(f"❌ Google User Handling Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ خطأ في حفظ بيانات المستخدم: {e}")
         return redirect('/login?error=user_save_failed')
 
-# Message functions
-def save_message(session_id, role, content):
-    """حفظ رسالة في قاعدة البيانات"""
-    try:
-        db = get_db()
-        c = db.cursor()
-        c.execute(
-            "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-            (session_id, role, content)
-        )
-        db.commit()
-        return True
-    except Exception as e:
-        print(f"Error saving message: {e}")
-        return False
+# ========== نظام الذكاء الاصطناعي المحسن ==========
 
-def get_messages(session_id, limit=50):
-    """جلب رسائل المحادثة"""
-    try:
-        db = get_db()
-        c = db.cursor()
-        c.execute(
-            "SELECT role, content, timestamp FROM messages WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
-            (session_id, limit)
-        )
-        messages = c.fetchall()
-        return [{"role": msg[0], "content": msg[1], "timestamp": msg[2]} for msg in messages]
-    except Exception as e:
-        print(f"Error getting messages: {e}")
-        return []
-
-def has_welcome_message(session_id):
-    """التحقق من وجود رسالة ترحيب"""
-    try:
-        db = get_db()
-        c = db.cursor()
-        c.execute(
-            "SELECT COUNT(*) FROM messages WHERE session_id = ? AND role = 'assistant'",
-            (session_id,)
-        )
-        return c.fetchone()[0] > 0
-    except:
-        return False
-
-# AI Chat API
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    """معالجة طلبات المحادثة مع OpenRouter الحقيقي"""
+    """نظام محادثة ذكي محسن مع OpenRouter"""
     try:
         if "user_id" not in session:
             return jsonify({"error": "غير مسجل الدخول"}), 401
@@ -611,327 +534,286 @@ def chat():
         # حفظ رسالة المستخدم
         save_message(session_id, "user", user_message)
 
-        # جلب سجل المحادثة
-        conversation_history = get_messages(session_id)
+        # جلب سجل المحادثة (آخر 10 رسائل)
+        conversation_history = get_messages(session_id, limit=10)
 
-        # إعداد prompt للمساعد
-        messages = [
-            {
-                "role": "system",
-                "content": """أنت ClainAI، مساعد ذكي عربي متكامل.
+        # إعداد نظام الذكاء المحسن
+        system_prompt = create_smart_system_prompt(session)
 
-🛠️ **معلومات المطور:**
-- **المطور:** المهندس محمد عبدو
-- **الخلفية التعليمية:** خريج تكنولوجيا المعلومات والاتصالات 
-- **الجامعة:** جامعة العلوم وتقانة المعلومات
-- **البريد الإلكتروني:** mohammedu3615@gmail.com
-
-🎯 **مهمتك:**
-- تقديم إجابات دقيقة ومفيدة باللغة العربية
-- الشرح بطريقة مبسطة وشاملة  
-- تقديم أمثلة عملية عندما يكون ذلك مناسباً
-- الرد بتهذيب واحترام
-- تقسيم الإجابات الطويلة إلى أقسام واضحة
-- استخدام تنسيق Markdown لجعل الإجابات أكثر تنظيماً
-- عندما يُسأل عن المطور أو من طورك، تقدم المعلومات أعلاه
-
-❌ **تجنب:**
-- الإجابات المختصرة جداً
-- المعلومات غير المؤكدة  
-- التحيز لأي جهة
-- إنكار معلومات المطور عند السؤال عنها
-
-كن مفيداً، دقيقاً، وواضحاً في جميع ردودك."""
-            }
-        ]
-
-        # إضافة تاريخ المحادثة (آخر 8 رسائل)
-        for msg in conversation_history[-8:]:
+        # بناء رسائل المحادثة
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # إضافة تاريخ المحادثة
+        for msg in conversation_history:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
         # إضافة الرسالة الجديدة
         messages.append({"role": "user", "content": user_message})
 
-        print(f"🤖 إرسال طلب إلى OpenRouter...")
+        print(f"🤖 إرسال طلب ذكي إلى OpenRouter...")
         print(f"📝 عدد الرسائل: {len(messages)}")
         print(f"💬 الرسالة: {user_message[:100]}...")
 
-        # قائمة النماذج الشغالة
-        available_models = [
-            "meta-llama/llama-3-70b-instruct",  # نموذج قوي ومجاني
-            "google/gemini-flash-1.5",          # نموذج سريع
-            "microsoft/wizardlm-2-8x22b",       # نموذج متقدم
-            "anthropic/claude-3-haiku"          # نموذج أنثروبيك
-        ]
-
-        # تجربة النماذج بالترتيب
-        assistant_reply = None
-        for model in available_models:
-            try:
-                # إرسال الطلب إلى OpenRouter
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": BASE_URL,
-                    "X-Title": "ClainAI"
-                }
-
-                payload = {
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": 4000,
-                    "temperature": 0.7,
-                }
-
-                print(f"🔄 جرب النموذج: {model}")
-                response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=60
-                )
-
-                print(f"📨 حالة الرد: {response.status_code}")
-
-                if response.status_code == 200:
-                    result = response.json()
-                    assistant_reply = result["choices"][0]["message"]["content"]
-                    print(f"✅ تم استلام رد بنجاح من {model}: {len(assistant_reply)} حرف")
-                    break
-                else:
-                    print(f"❌ النموذج {model} غير متاح: {response.status_code}")
-                    continue
-
-            except Exception as e:
-                print(f"❌ خطأ في النموذج {model}: {e}")
-                continue
-
-        # إذا فشلت جميع النماذج، استخدم رد افتراضي ذكي
-        if not assistant_reply:
-            print("⚠️ جميع النماذج فشلت، استخدام رد افتراضي")
-            assistant_reply = generate_smart_response(user_message)
+        # استدعاء OpenRouter مع النماذج الذكية
+        ai_response = call_openrouter_ai(messages, session_id)
 
         # حفظ رد المساعد
-        save_message(session_id, "assistant", assistant_reply)
+        save_message(session_id, "assistant", ai_response)
+
+        # تحديث الإحصائيات
+        update_user_stats(session['user_id'])
 
         return jsonify({
-            "response": assistant_reply,
-            "message_count": len(conversation_history) + 1
+            "response": ai_response,
+            "message_count": len(conversation_history) + 1,
+            "user_info": {
+                "name": session.get("user_name"),
+                "role": session.get("user_role")
+            }
         })
 
     except Exception as e:
-        error_msg = f"حدث خطأ: {str(e)}"
+        error_msg = f"حدث خطأ في النظام: {str(e)}"
         print(f"❌ {error_msg}")
+        
+        # رد ذكي عند الخطأ
+        fallback_response = generate_smart_fallback_response(user_message)
         session_id = f"user_{session.get('user_id', 'guest')}"
-        save_message(session_id, "assistant", "عذراً، حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.")
-        return jsonify({"error": error_msg}), 500
+        save_message(session_id, "assistant", fallback_response)
+        
+        return jsonify({
+            "response": fallback_response,
+            "error": "تم استخدام النسخة الاحتياطية الذكية"
+        })
 
-def generate_smart_response(user_message):
-    """إنشاء ردود ذكية إذا فشل الاتصال بالـ AI"""
+def create_smart_system_prompt(session):
+    """إنشاء prompt ذكي للمساعد"""
+    user_name = session.get("user_name", "المستخدم")
+    user_email = session.get("user_email", "")
+    provider = session.get("oauth_provider", "ضيف")
+    
+    developer_info = """
+👨‍💻 **معلومات المطور:**
+- **الاسم:** محمد عبدو
+- **التخصص:** خريج تكنولوجيا المعلومات والاتصالات
+- **الجامعة:** جامعة العلوم وتقانة المعلومات  
+- **البريد:** mohammedu3615@gmail.com
+- **المشروع:** ClainAI - المساعد الذكي العربي المتكامل
+"""
+
+    system_prompt = f"""أنت **ClainAI**، مساعد ذكي عربي متكامل تم تطويرك بواسطة محمد عبدو.
+
+{developer_info}
+
+🎯 **مهمتك:** تقديم أفضل تجربة محادثة ذكية باللغة العربية مع:
+- إجابات دقيقة، مفصلة، ومفيدة
+- شرح مبسط وشامل للمفاهيم المعقدة  
+- أمثلة عملية وتطبيقات حية
+- تقسيم المعلومات إلى أقسام واضحة
+- استخدام تنسيق Markdown لتحسين القراءة
+
+👤 **المستخدم الحالي:** {user_name} (الدخول بـ {provider})
+
+❌ **تجنب:** 
+- الإجابات المختصرة غير المفيدة
+- المعلومات غير المؤكدة
+- التحيز لأي جهة
+- إنكار معلومات المطور عند السؤال عنه
+
+💫 **كن:** مفيداً، دقيقاً، واضحاً، ومحترفاً في جميع ردودك.
+
+🌟 **تذكر:** أنت مساعد عربي ذكي تفتخر بدعم اللغة العربية وتقديم أفضل إجابة ممكنة!"""
+
+    return system_prompt
+
+def call_openrouter_ai(messages, session_id):
+    """استدعاء OpenRouter مع نماذج ذكية"""
+    # قائمة النماذج الذكية بالترتيب
+    smart_models = [
+        "google/gemini-2.0-flash-exp:free",  # الأفضل والأسرع
+        "meta-llama/llama-3-70b-instruct:nitro",  # قوي ومجاني
+        "google/gemini-flash-1.5",  # سريع وذكي
+        "microsoft/wizardlm-2-8x22b",  # متقدم
+        "anthropic/claude-3-haiku"  # أنثروبيك
+    ]
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": BASE_URL,
+        "X-Title": "ClainAI - الذكاء الاصطناعي العربي"
+    }
+
+    for model in smart_models:
+        try:
+            print(f"🔄 جرب النموذج الذكي: {model}")
+            
+            payload = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": 4000,
+                "temperature": 0.7,
+                "top_p": 0.9,
+            }
+
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=45
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                assistant_reply = result["choices"][0]["message"]["content"]
+                tokens_used = result.get("usage", {}).get("total_tokens", 0)
+                
+                print(f"✅ تم استلام رد ذكي من {model}")
+                print(f"📊 Tokens used: {tokens_used}")
+                
+                # تحديث tokens في قاعدة البيانات
+                update_message_tokens(session_id, tokens_used, model)
+                
+                return assistant_reply
+            else:
+                print(f"⚠️ النموذج {model} غير متاح: {response.status_code}")
+                continue
+
+        except Exception as e:
+            print(f"❌ خطأ في النموذج {model}: {e}")
+            continue
+
+    # إذا فشلت جميع النماذج، استخدم الرد الذكي الافتراضي
+    print("⚠️ جميع النماذج فشلت، استخدام الرد الذكي الافتراضي")
+    user_message = messages[-1]["content"] if messages else ""
+    return generate_smart_fallback_response(user_message)
+
+def generate_smart_fallback_response(user_message):
+    """إنشاء رد ذكي عند فشل الاتصال"""
     message_lower = user_message.lower()
+    
+    # ردود ذكية مبرمجة
+    smart_responses = {
+        "hello": "مرحباً بك! 🌟 أنا ClainAI، المساعد الذكي العربي. للأسف حالياً الخدمة متقطعة، لكن جرب تحديث الصفحة أو الانتظار قليلاً! 😊",
+        "مرحبا": "أهلاً وسهلاً! 🎉 أنا ClainAI، المساعد الذكي. نعمل على حل بعض المشاكل التقنية، جرب مرة أخرى بعد قليل! 💫",
+        "ما هو الذكاء الاصطناعي": """🤖 **الذكاء الاصطناعي (AI)** 
 
-    # ردود ذكية مبرمجة مسبقاً
-    responses = {
-        "hello": "مرحباً بك! أنا ClainAI، مساعدك الذكي. كيف يمكنني مساعدتك اليوم؟ 😊",
-        "hi": "أهلاً وسهلاً! أنا هنا لمساعدتك في أي استفسار. 💫",
-        "مرحبا": "مرحباً بك! أنا ClainAI، مساعدك الذكي العربي. كيف يمكنني خدمتك؟ 🌟",
-        "السلام عليكم": "وعليكم السلام ورحمة الله وبركاته! أنا ClainAI، كيف يمكنني مساعدتك؟ 🤲",
-        "سلام": "وعليكم السلام! أنا ClainAI، مساعدك الذكي. اسألني عن أي شيء! 😊",
-        "شكرا": "العفو! دائماً سعيد بمساعدتك. هل هناك شيء آخر تريد الاستفسار عنه؟ 😊",
-        "ما هو الذكاء الاصطناعي": """**الذكاء الاصطناعي (Artificial Intelligence)** 🤖
+هو محاكاة الذكاء البشري في الآلات المبرمجة للتفكير والتعلم مثل البشر.
 
-هو مجال من علوم الكمبيوتر يهتم بإنشاء أنظمة قادرة على أداء مهام تتطلب ذكاءً بشرياً مثل:
+**🔹 المجالات الرئيسية:**
+- **التعلم الآلي** - تحسين الأداء من خلال التجربة
+- **المعالجة اللغوية** - فهم اللغات الطبيعية  
+- **الرؤية الحاسوبية** - تحليل الصور والفيديو
+- **الروبوتات** - التحكم في الأجهزة المادية
 
-🔹 **التعلم** - القدرة على تحسين الأداء من خلال التجربة
-🔹 **الاستدلال** - حل المشكلات المعقدة
-🔹 **الإدراك** - فهم الصور والنصوص والأصوات
-🔹 **التفاعل** - التواصل بلغة طبيعية
+**🚀 التطبيقات:** المساعدات الذكية، السيارات ذاتية القيادة، التشخيص الطبي، الترجمة الآلية، وغيرها!""",
 
-**أنواع الذكاء الاصطناعي:**
-• 🧠 **الذكاء الضيق** - متخصص في مهام محددة
-• 🌟 **الذكاء العام** - يشبه الذكاء البشري (ما زال قيد التطوير)
+        "كيف أتعلم البرمجة": """💻 **دليل تعلم البرمجة للمبتدئين:**
 
-**التطبيقات:** السيارات ذاتية القيادة، المساعدات الذكية، التشخيص الطبي، وغيرها الكثير!""",
+**🎯 الخطوة 1: اختر لغة مناسبة**
+- 🐍 **Python** - الأفضل للمبتدئين (بسيطة وقوية)
+- 🌐 **JavaScript** - لتطوير الويب
+- ☕ **Java** - للتطبيقات الكبيرة
 
-        "كيف أتعلم البرمجة": """**دليل تعلم البرمجة خطوة بخطوة** 💻
+**📚 الخطوة 2: مصادر مجانية**
+- موقع **freeCodeCamp** (عربي وإنجليزي)
+- قناة **Elzero Web School** على YouTube
+- منصة **Coursera** و **edX**
 
-🎯 **الخطوة 1: اختر لغة برمجة مناسبة للمبتدئين:**
-• 🐍 **Python** - الأفضل للمبتدئين (بسيطة وقوية)
-• 🌐 **JavaScript** - لتطوير الويب
-• ☕ **Java** - للتطبيقات الكبيرة
+**🛠️ الخطوة 3: مشاريع عملية**
+- موقع ويب شخصي
+- تطبيق آلة حاسبة
+- لعبة بسيطة
 
-📚 **الخطوة 2: مصادر التعلم المجانية:**
-• موقع **freeCodeCamp** (عربي وإنجليزي)
-• قناة **Elzero Web School** على YouTube
-• منصة **Coursera** و **edX**
+**💡 النصيحة الذهبية:** الممارسة المستمرة أهم من الكمية! ابدأ بمشاريع صغيرة.""",
 
-🛠️ **الخطوة 3: مشاريع عملية:**
-• موقع ويب شخصي
-• تطبيق آلة حاسبة
-• لعبة بسيطة
-
-💡 **نصيحة:** الممارسة المستمرة أهم من الكمية! ابدأ بمشاريع صغيرة وتدرج.""",
-
-        "اشرح الحوسبة السحابية": """**🌐 الحوسبة السحابية (Cloud Computing)**
-
-هي تقديم خدمات الحوسبة عبر الإنترنت بدلاً من الاعتماد على الأجهزة المحلية.
-
-**✨ المميزات:**
-• 💰 **توفير التكلفة** - لا حاجة لشراء أجهزة باهظة
-• 📈 **مرونة** - زيادة أو تقليل الموارد حسب الحاجة
-• 🔒 **أمان** - حماية بيانات متقدمة
-• 🌍 **وصول عالمي** - من أي مكان وفي أي وقت
-
-**🚀 أنواع الخدمات:**
-1. **IaaS** - البنية التحتية كخدمة
-2. **PaaS** - المنصة كخدمة
-3. **SaaS** - البرنامج كخدمة
-
-**أمثلة:** 🌩️ Amazon Web Services, ☁️ Microsoft Azure, ☁️ Google Cloud""",
-
-        # ===== الردود الجديدة عن المطور =====
         "من طورك": """🛠️ **معلومات المطور:**
 
-👨‍💻 **المطور:** المهندس محمد عبدو  
-🎓 **الخلفية التعليمية:** خريج تكنولوجيا المعلومات والاتصالات  
+👨‍💻 **الاسم:** محمد عبدو  
+🎓 **التخصص:** خريج تكنولوجيا المعلومات والاتصالات  
 🏫 **الجامعة:** جامعة العلوم وتقانة المعلومات  
-📧 **البريد الإلكتروني:** mohammedu3615@gmail.com
+📧 **البريد:** mohammedu3615@gmail.com
 
-تم تطوير ClainAI بعناية لتقديم أفضل تجربة محادثة ذكية باللغة العربية! 🌟""",
-
-        "من مبتكرك": """🛠️ **معلومات المطور:**
-
-👨‍💻 **المطور:** المهندس محمد عبدو  
-🎓 **الخلفية التعليمية:** خريج تكنولوجيا المعلومات والاتصالات  
-🏫 **الجامعة:** جامعة العلوم وتقانة المعلومات  
-📧 **البريد الإلكتروني:** mohammedu3615@gmail.com
-
-تم تطوير ClainAI بعناية لتقديم أفضل تجربة محادثة ذكية باللغة العربية! 🌟""",
-
-        "من صنعك": """🛠️ **معلومات المطور:**
-
-👨‍💻 **المطور:** المهندس محمد عبدو  
-🎓 **الخلفية التعليمية:** خريج تكنولوجيا المعلومات والاتصالات  
-🏫 **الجامعة:** جامعة العلوم وتقانة المعلومات  
-📧 **البريد الإلكتروني:** mohammedu3615@gmail.com
-
-تم تطوير ClainAI بعناية لتقديم أفضل تجربة محادثة ذكية باللغة العربية! 🌟""",
-        
-        "من هو محمد عبدو": """🛠️ **معلومات المطور:**
-
-👨‍💻 **المطور:** المهندس محمد عبدو  
-🎓 **الخلفية التعليمية:** خريج تكنولوجيا المعلومات والاتصالات  
-🏫 **الجامعة:** جامعة العلوم وتقانة المعلومات  
-📧 **البريد الإلكتروني:** mohammedu3615@gmail.com
-
-هو مطور ومبرمج متخصص في الذكاء الاصطناعي وتطبيقات الويب! 🌟"""
+تم تطوير ClainAI بعناية لتقديم أفضل تجربة محادثة ذكية باللغة العربية! 🌟"""
     }
 
     # البحث عن أفضل تطابق
-    for key, response in responses.items():
+    for key, response in smart_responses.items():
         if key in message_lower:
             return response
 
-    # إذا لم يوجد تطابق، استخدم رد عام ذكي
+    # رد عام ذكي
     general_responses = [
-        f"أهلاً بك! سؤالك '{user_message}' مثير للاهتمام. للأسف حالياً أركز على الذكاء الاصطناعي والبرمجة والتقنية. هل لديك سؤال في هذه المجالات؟ 🤖",
-        f"شكراً لسؤالك! أنا متخصص في المواضيع التقنية والبرمجة والذكاء الاصطناعي. اسألني عن أي شيء في هذه المجالات وسأكون سعيداً بمساعدتك! 💻",
-        f"سؤال رائع! حالياً أقدم إجابات في مجالات التقنية والبرمجة. جرب أسئلة مثل 'ما هو الذكاء الاصطناعي؟' أو 'كيف أتعلم البرمجة؟' 🌟"
+        f"أهلاً بك! 🌟 سؤالك '{user_message}' مثير للاهتمام. حالياً نواجه بعض المشاكل التقنية، جرب مرة أخرى بعد قليل! 😊",
+        f"شكراً لسؤالك! 💫 للأسف الخدمة متقطعة حالياً، لكننا نعمل على حل المشكلة. جرب تحديث الصفحة! 🚀",
+        f"سؤال رائع! 🎯 أنا ClainAI المساعد الذكي. حالياً الخدمة غير مستقرة، جرب المحادثة بعد دقائق قليلة! 💪"
     ]
-
+    
     return random.choice(general_responses)
 
-# ======== دوال المرفقات المحسنة ========
+# ========== دوال المساعدة المحسنة ==========
 
-@app.route("/api/upload", methods=["POST"])
-def upload_file():
-    """رفع الملفات والصور"""
+def save_message(session_id, role, content, tokens=0, model=None):
+    """حفظ رسالة محسنة في قاعدة البيانات"""
     try:
-        if "user_id" not in session:
-            return jsonify({"error": "غير مسجل الدخول"}), 401
-
-        if 'file' not in request.files:
-            return jsonify({"error": "لم يتم اختيار ملف"}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"error": "لم يتم اختيار ملف"}), 400
-
-        # السماح بأنواع الملفات
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx'}
-        if '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions:
-            # استخدام مجلد مؤقت لـ Vercel
-            upload_folder = "/tmp/uploads"
-            if not os.path.exists(upload_folder):
-                os.makedirs(upload_folder)
-            
-            filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
-            file_path = os.path.join(upload_folder, filename)
-            file.save(file_path)
-
-            # حفظ رسالة في المحادثة
-            session_id = f"user_{session['user_id']}"
-            file_type = "صورة" if file.filename.lower().endswith(('png', 'jpg', 'jpeg', 'gif')) else "ملف"
-            
-            user_message = f"📎 قمت بمشاركة {file_type}: {file.filename}"
-            save_message(session_id, "user", user_message)
-
-            # إرسال رد ذكي
-            file_size = f"{(os.path.getsize(file_path) / 1024):.1f} KB"
-            assistant_reply = f"✅ **تم استلام {file_type} بنجاح!**\n\n📁 **اسم الملف:** {file.filename}\n📊 **الحجم:** {file_size}\n💾 **النوع:** {file_type}\n\n💡 *يمكنك وصف محتوى الملف وسأساعدك في تحليله!*"
-
-            save_message(session_id, "assistant", assistant_reply)
-
-            return jsonify({
-                "success": True,
-                "message": f"تم رفع {file_type} بنجاح",
-                "filename": filename,
-                "type": file_type,
-                "size": file_size
-            })
-
-        return jsonify({"error": "نوع الملف غير مدعوم"}), 400
-
+        db = get_db()
+        c = db.cursor()
+        c.execute(
+            "INSERT INTO messages (session_id, role, content, tokens_used, model_used) VALUES (?, ?, ?, ?, ?)",
+            (session_id, role, content, tokens, model)
+        )
+        db.commit()
+        return True
     except Exception as e:
-        return jsonify({"error": f"حدث خطأ: {str(e)}"}), 500
+        print(f"❌ خطأ في حفظ الرسالة: {e}")
+        return False
 
-@app.route("/api/location", methods=["POST"])
-def share_location():
-    """مشاركة الموقع"""
+def get_messages(session_id, limit=20):
+    """جلب رسائل المحادثة محسنة"""
     try:
-        if "user_id" not in session:
-            return jsonify({"error": "غير مسجل الدخول"}), 401
-
-        data = request.get_json()
-        lat = data.get('lat')
-        lng = data.get('lng')
-
-        if not lat or not lng:
-            return jsonify({"error": "إحداثيات الموقع مطلوبة"}), 400
-
-        session_id = f"user_{session['user_id']}"
-        
-        user_message = f"📍 موقعي: {lat}, {lng}"
-        save_message(session_id, "user", user_message)
-
-        assistant_reply = f"**🌍 تم استلام موقعك!**\n\n📍 **الإحداثيات:** {lat}, {lng}\n\n💫 *يمكنني مساعدتك في:*\n• معلومات عن المنطقة\n• الطقس\n• أماكن قريبة\n• أي استفسار عن الموقع*"
-
-        save_message(session_id, "assistant", assistant_reply)
-
-        return jsonify({
-            "success": True, 
-            "message": "تم مشاركة الموقع",
-            "coordinates": {"lat": lat, "lng": lng}
-        })
-
+        db = get_db()
+        c = db.cursor()
+        c.execute(
+            "SELECT role, content, timestamp FROM messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (session_id, limit)
+        )
+        messages = c.fetchall()
+        return [{"role": msg[0], "content": msg[1], "timestamp": msg[2]} for msg in messages[::-1]]
     except Exception as e:
-        return jsonify({"error": f"حدث خطأ: {str(e)}"}), 500
+        print(f"❌ خطأ في جلب الرسائل: {e}")
+        return []
 
-# ======== دوال المحادثة والإدارة ========
+def update_message_tokens(session_id, tokens, model):
+    """تحديث tokens للنموذج المستخدم"""
+    try:
+        db = get_db()
+        c = db.cursor()
+        c.execute(
+            "UPDATE messages SET tokens_used = ?, model_used = ? WHERE session_id = ? AND id = (SELECT MAX(id) FROM messages WHERE session_id = ?)",
+            (tokens, model, session_id, session_id)
+        )
+        db.commit()
+    except Exception as e:
+        print(f"❌ خطأ في تحديث tokens: {e}")
+
+def update_user_stats(user_id):
+    """تحديث إحصائيات المستخدم"""
+    try:
+        db = get_db()
+        c = db.cursor()
+        c.execute(
+            "UPDATE user_stats SET total_messages = total_messages + 1, last_activity = ? WHERE user_id = ?",
+            (datetime.now(timezone.utc).isoformat(), user_id)
+        )
+        db.commit()
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الإحصائيات: {e}")
+
+# ========== Routes الإضافية المحسنة ==========
 
 @app.route("/api/conversation")
 def get_conversation():
-    """جلب سجل المحادثة"""
+    """جلب سجل المحادثة المحسن"""
     if "user_id" not in session:
         return jsonify({"error": "غير مسجل الدخول"}), 401
 
@@ -943,38 +825,40 @@ def get_conversation():
         "user_info": {
             "name": session.get("user_name", "مستخدم"),
             "email": session.get("user_email", ""),
-            "role": session.get("user_role", "user")
+            "role": session.get("user_role", "user"),
+            "provider": session.get("oauth_provider", "guest"),
+            "avatar": session.get("avatar_url")
         }
     })
 
-@app.route("/api/history")
-def get_history():
-    """جلب سجل المحادثة (للتطابق مع الـ frontend)"""
-    return get_conversation()
-
-@app.route("/api/logout")
-def logout():
-    """تسجيل الخروج"""
-    session.clear()
-    return jsonify({"success": True, "redirect": "/login"})
-
-@app.route("/api/user")
-def get_user():
-    """الحصول على معلومات المستخدم"""
+@app.route("/api/user/stats")
+def get_user_stats():
+    """جلب إحصائيات المستخدم"""
     if "user_id" not in session:
         return jsonify({"error": "غير مسجل الدخول"}), 401
 
-    return jsonify({
-        "id": session["user_id"],
-        "name": session.get("user_name", "مستخدم"),
-        "email": session.get("user_email", ""),
-        "role": session.get("user_role", "user"),
-        "provider": session.get("oauth_provider", "local")
-    })
+    try:
+        db = get_db()
+        c = db.cursor()
+        c.execute(
+            "SELECT total_messages, total_tokens, favorite_model FROM user_stats WHERE user_id = ?",
+            (session['user_id'],)
+        )
+        stats = c.fetchone()
+        
+        return jsonify({
+            "stats": dict(stats) if stats else {"total_messages": 0, "total_tokens": 0},
+            "user": {
+                "name": session.get("user_name"),
+                "join_date": datetime.now().strftime("%Y-%m-%d")
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/clear", methods=["POST"])
 def clear_conversation():
-    """مسح سجل المحادثة"""
+    """مسح سجل المحادثة المحسن"""
     try:
         if "user_id" not in session:
             return jsonify({"error": "غير مسجل الدخول"}), 401
@@ -986,124 +870,84 @@ def clear_conversation():
         c.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         db.commit()
 
-        # إضافة رسالة ترحيب جديدة بعد المسح
-        welcome_message = """🎉 **مرحباً بك من جديد!** 🌟
+        # رسالة ترحيب جديدة ذكية
+        welcome_message = """🎉 **مرحباً بك من جديد في ClainAI!** 🌟
 
 تم مسح المحادثة السابقة بنجاح.
 
-**💫 جرب هذه الأسئلة:**
-• "ما هو الذكاء الاصطناعي؟"
-• "كيف أتعلم البرمجة؟"
-• "اشرح لي الحوسبة السحابية"
+**👨‍💻 المطور:** محمد عبدو  
+**📧 البريد:** mohammedu3615@gmail.com
 
-استمتع بمحادثة جديدة! 😊"""
+**🚀 ابدأ محادثة جديدة ذكية:**
+• "ما هي أحدث تقنيات الذكاء الاصطناعي؟"
+• "كيف أطور تطبيق ويب متكامل؟"  
+• "ما الفرق بين Python و JavaScript؟"
+• "كيف أبدأ مشروع برمجي ناجح؟"
+
+اسألني عن أي شيء! 😊"""
 
         save_message(session_id, "assistant", welcome_message)
 
-        return jsonify({"success": True, "message": "تم مسح المحادثة"})
+        return jsonify({
+            "success": True, 
+            "message": "تم مسح المحادثة وبدء محادثة جديدة"
+        })
 
     except Exception as e:
         return jsonify({"error": f"حدث خطأ: {str(e)}"}), 500
 
-# Debug routes
-@app.route("/api/debug/github")
-def debug_github():
-    """تصحيح إعدادات GitHub OAuth"""
+@app.route("/api/logout")
+def logout():
+    """تسجيل الخروج المحسن"""
+    session.clear()
     return jsonify({
-        'status': 'ready',
-        'client_id': GITHUB_CLIENT_ID,
-        'client_secret_set': bool(GITHUB_CLIENT_SECRET),
-        'callback_url': f"{BASE_URL}/api/auth/github/callback",
-        'session_keys': list(session.keys())
+        "success": True, 
+        "message": "تم تسجيل الخروج بنجاح",
+        "redirect": "/login"
     })
 
-@app.route("/api/debug/google")
-def debug_google():
-    """تصحيح إعدادات Google OAuth"""
+# ========== دوال التصحيح المحسنة ==========
+
+@app.route("/api/debug/info")
+def debug_info():
+    """معلومات تصحيح محسنة"""
     return jsonify({
-        'status': 'ready',
-        'client_id': GOOGLE_CLIENT_ID,
-        'client_secret_set': bool(GOOGLE_CLIENT_SECRET),
-        'callback_url': f"{BASE_URL}/api/auth/google/callback",
-        'session_keys': list(session.keys())
+        'app': 'ClainAI - الإصدار النهائي',
+        'version': '2.0.0',
+        'developer': 'محمد عبدو - mohammedu3615@gmail.com',
+        'base_url': BASE_URL,
+        'environment': 'production' if 'VERCEL' in os.environ else 'development',
+        'database': DB_PATH,
+        'session_user': session.get("user_id"),
+        'oauth_ready': {
+            'github': bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET),
+            'google': bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+        },
+        'openrouter_ready': bool(OPENROUTER_API_KEY)
     })
 
-@app.route("/api/debug/db")
-def debug_db():
-    """تصحيح قاعدة البيانات"""
-    try:
-        db = get_db()
-        c = db.cursor()
+# ========== التشغيل الرئيسي ==========
 
-        # جلب معلومات الجداول
-        c.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [table[0] for table in c.fetchall()]
-
-        table_info = {}
-        for table in tables:
-            c.execute(f"PRAGMA table_info({table})")
-            columns = [col[1] for col in c.fetchall()]
-            table_info[table] = columns
-
-        # جلب عدد المستخدمين
-        c.execute("SELECT COUNT(*) FROM users")
-        user_count = c.fetchone()[0]
-
-        c.execute("SELECT COUNT(*) FROM messages")
-        message_count = c.fetchone()[0]
-
-        return jsonify({
-            "tables": table_info,
-            "user_count": user_count,
-            "message_count": message_count,
-            "session_user": session.get("user_id")
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ======== دوال PWA الجديدة ========
-
-@app.route('/manifest.json')
-def manifest():
-    return send_from_directory('static', 'manifest.json')
-
-@app.route('/service-worker.js')
-def service_worker():
-    return send_from_directory('static', 'service-worker.js')
-
-# إضافة header لـ PWA
-@app.after_request
-def add_pwa_headers(response):
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    return response
-
-# ======== نهاية دوال PWA ========
-
-# Main execution
 if __name__ == "__main__":
     with app.app_context():
         init_db()
 
-        print(f"📍 Production: {BASE_URL}")
-        print(f"📧 Developer: mohammedu3615@gmail.com")
-        print("\n💫 **المميزات الرئيسية**:")
-        print("   💬 محادثة ذكية وطبيعية")
-        print("   🧠 فهم عميق للنية والسياق")
-        print("   📚 إجابات مفصلة وشاملة")
-        print("   🌍 دعم كامل للعربية")
-        print("   📱 واجهة مستخدم متكاملة")
-        print("   🔐 تسجيل دخول بـ GitHub OAuth")
-        print("   🔐 تسجيل دخول بـ Google OAuth")
-        print("   📎 رفع الملفات والصور")
-        print("   📍 مشاركة الموقع")
-        print("\n🔍 **جرب هذه الأسئلة الذكية**:")
-        print("   - 'ما هو الذكاء الاصطناعي?' 🤖")
-        print("   - 'اشرح الحوسبة السحابية' 🌐")
-        print("   - 'كيف أتعلم البرمجة?' 💻")
-        print("   - 'من طورك?' 👨‍💻")
-        print("   - 'من هو محمد عبدو?' 🎓")
+        print("\n💫 **المميزات المحسنة في ClainAI:**")
+        print("   🧠 نظام ذكاء اصطناعي متقدم بمتعدد النماذج")
+        print("   🔐 نظام مصادقة محسن بـ GitHub و Google OAuth")  
+        print("   💾 قاعدة بيانات محسنة مع إحصائيات")
+        print("   🌍 دعم عربي كامل وردود ذكية")
+        print("   📱 واجهة متكاملة وتجربة مستخدم فائقة")
+        print("   🚀 أداء محسن وسريع")
+        print("   🔧 نظام تصحيح أخطاء ذكي")
+        
+        print("\n🎯 **جرب هذه الأسئلة الذكية:**")
+        print("   - 'ما هو الذكاء الاصطناعي التوليدي?' 🤖")
+        print("   - 'كيف أطور تطبيق ويب متكامل?' 🌐") 
+        print("   - 'ما هي أحدث تقنيات 2024?' 🚀")
+        print("   - 'من هو المطور محمد عبدو?' 👨‍💻")
+        print("   - 'ما الفرق بين AI و Machine Learning?' 🔬")
 
-    # تشغيل للسيرفر
+    # تشغيل السيرفر
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
