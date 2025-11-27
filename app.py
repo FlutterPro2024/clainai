@@ -303,6 +303,119 @@ def chat():
         return jsonify({'success': True, 'reply': reply, 'model_used': used_model})
     except Exception as e:
         return jsonify({'error': f'حدث خطأ: {str(e)}'}), 500
+# Google OAuth Callback Route
+@app.route('/api/auth/google/callback')
+def google_callback():
+    try:
+        code = request.args.get('code')
+        if not code:
+            return redirect('/login?error=missing_code')
+        
+        # Exchange code for tokens
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': GOOGLE_REDIRECT_URI
+        }
+        
+        token_response = requests.post(token_url, data=token_data)
+        token_json = token_response.json()
+        
+        if 'error' in token_json:
+            return redirect('/login?error=token_failed')
+        
+        access_token = token_json['access_token']
+        
+        # Get user info
+        user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+        headers = {'Authorization': f'Bearer {access_token}'}
+        user_response = requests.get(user_info_url, headers=headers)
+        user_info = user_response.json()
+        
+        # Create or get user
+        init_db()
+        user_id = f"google_{user_info['id']}"
+        conn = get_db_connection()
+        
+        conn.execute(
+            'INSERT OR REPLACE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
+            (user_id, user_info.get('name', 'User'), user_info.get('email', ''), 'user')
+        )
+        conn.commit()
+        conn.close()
+        
+        # Set session
+        session['user_id'] = user_id
+        session['user_name'] = user_info.get('name', 'User')
+        session['user_role'] = 'user'
+        
+        return redirect('/')
+        
+    except Exception as e:
+        print(f"❌ Google OAuth error: {str(e)}")
+        return redirect('/login?error=auth_failed')
+
+# GitHub OAuth Callback Route  
+@app.route('/api/auth/github/callback')
+def github_callback():
+    try:
+        code = request.args.get('code')
+        if not code:
+            return redirect('/login?error=missing_code')
+        
+        # Exchange code for tokens
+        token_url = "https://github.com/login/oauth/access_token"
+        token_data = {
+            'client_id': GITHUB_CLIENT_ID,
+            'client_secret': GITHUB_CLIENT_SECRET,
+            'code': code
+        }
+        headers = {'Accept': 'application/json'}
+        token_response = requests.post(token_url, data=token_data, headers=headers)
+        token_json = token_response.json()
+        
+        if 'error' in token_json:
+            return redirect('/login?error=token_failed')
+        
+        access_token = token_json['access_token']
+        
+        # Get user info
+        user_info_url = "https://api.github.com/user"
+        headers = {'Authorization': f'token {access_token}'}
+        user_response = requests.get(user_info_url, headers=headers)
+        user_info = user_response.json()
+        
+        # Get email (if available)
+        email_url = "https://api.github.com/user/emails"
+        email_response = requests.get(email_url, headers=headers)
+        emails = email_response.json()
+        primary_email = next((email['email'] for email in emails if email['primary']), '')
+        
+        # Create or get user
+        init_db()
+        user_id = f"github_{user_info['id']}"
+        conn = get_db_connection()
+        
+        conn.execute(
+            'INSERT OR REPLACE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
+            (user_id, user_info.get('name', user_info.get('login', 'User')), primary_email, 'user')
+        )
+        conn.commit()
+        conn.close()
+        
+        # Set session
+        session['user_id'] = user_id
+        session['user_name'] = user_info.get('name', user_info.get('login', 'User'))
+        session['user_role'] = 'user'
+        
+        return redirect('/')
+        
+    except Exception as e:
+        print(f"❌ GitHub OAuth error: {str(e)}")
+        return redirect('/login?error=auth_failed')
 
 if __name__ == "__main__":
     with app.app_context():
