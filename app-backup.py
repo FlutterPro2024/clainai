@@ -148,8 +148,7 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
-# ========== Routes الأساسية ==========
-
+# Routes
 @app.route("/")
 def index():
     if 'user_id' not in session:
@@ -179,62 +178,7 @@ def serve_service_worker():
 def serve_favicon():
     return send_from_directory('static', 'favicon.ico')
 
-# ========== Routes فحص الصحة ==========
-
-@app.route("/api/health")
-def health_check():
-    """فحص صحة التطبيق"""
-    try:
-        init_db()
-        return jsonify({
-            "status": "healthy", 
-            "database": "connected",
-            "message": "✅ ClainAI is working perfectly!",
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route("/api/check-tables")  
-def check_tables():
-    """فحص الجداول في قاعدة البيانات"""
-    try:
-        conn = get_db_connection()
-        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        conn.close()
-        return jsonify({
-            "tables": [table[0] for table in tables],
-            "count": len(tables),
-            "status": "success"
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/test-guest-login")
-def test_guest_login():
-    """اختبار الدخول كضيف"""
-    try:
-        init_db()
-        user_id = f"test_guest_{secrets.token_hex(4)}"
-        
-        conn = get_db_connection()
-        conn.execute(
-            'INSERT OR IGNORE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
-            (user_id, 'ضيف اختبار', f'test_{user_id}@clainai.com', 'user')
-        )
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            "success": True,
-            "message": "✅ اختبار الدخول كضيف ناجح",
-            "test_user_id": user_id
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ========== Routes النظام ==========
-
+# Route لإنشاء الجداول يدوياً (للتأكد من إنشائها)
 @app.route("/api/init-db")
 def init_database():
     """إنشاء الجداول يدوياً"""
@@ -962,3 +906,59 @@ if __name__ == "__main__":
         print(f"🌐 التطبيق جاهز على: {BASE_URL}")
         print("👑 المطور: محمد عبد القادر السراج - mohammedu3615@gmail.com")
     app.run(host='0.0.0.0', port=5000, debug=False)
+
+# ========== Routes للتأكد من صحة التطبيق ==========
+
+@app.route("/api/health")
+def health_check():
+    """فحص صحة التطبيق"""
+    try:
+        init_db()
+        return jsonify({
+            "status": "healthy", 
+            "database": "connected",
+            "message": "✅ ClainAI is working perfectly!",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/api/check-tables")  
+def check_tables():
+    """فحص الجداول في قاعدة البيانات"""
+    try:
+        conn = get_db_connection()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        conn.close()
+        return jsonify({
+            "tables": [table[0] for table in tables],
+            "count": len(tables),
+            "status": "success"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/test-guest-login")
+def test_guest_login():
+    """اختبار الدخول كضيف"""
+    try:
+        init_db()
+        user_id = f"test_guest_{secrets.token_hex(4)}"
+        
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT OR IGNORE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
+            (user_id, 'ضيف اختبار', f'test_{user_id}@clainai.com', 'user')
+        )
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "✅ اختبار الدخول كضيف ناجح",
+            "test_user_id": user_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+print("🔧 تم إضافة routes فحص الصحة بنجاح")
