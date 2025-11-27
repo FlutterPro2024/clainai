@@ -1,14 +1,17 @@
-<!DOCTYPE html>                                    <html lang="ar" dir="rtl">
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ClainAi - تسجيل الدخول</title>
     <link rel="stylesheet" href="/static/styles.css">
     <style>
-        * {                                                    margin: 0;
+        * {
+            margin: 0;
             padding: 0;
-            box-sizing: border-box;                        }
-
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -337,17 +340,19 @@
             showAlert('جاري الاتصال بـ Facebook...', 'info');
             showLoading(true);
             setTimeout(() => {
-                window.location.href = '/api/auth/facebook';
+                showAlert('ميزة Facebook قريباً!', 'info');
+                showLoading(false);
             }, 1000);
         }
 
+        // دالة الدخول كضيف - معدلة ✅
         async function loginAsGuest() {
             showAlert('جاري إعداد الجلسة كضيف...', 'info');
             showLoading(true);
 
             try {
                 const response = await fetch('/api/guest-login', {
-                    method: 'GET',
+                    method: 'POST',  // ✅ تم التعديل من GET إلى POST
                     headers: {
                         'Content-Type': 'application/json',
                     }
@@ -364,8 +369,15 @@
                     throw new Error(data.error || 'حدث خطأ أثناء الدخول كضيف');
                 }
             } catch (error) {
+                console.error('❌ خطأ في الدخول كضيف:', error);
                 showAlert(error.message, 'error');
                 showLoading(false);
+                
+                // محاولة بديلة إذا فشل POST
+                setTimeout(() => {
+                    showAlert('جرب طريقة بديلة...', 'info');
+                    window.location.href = '/api/guest-login';
+                }, 2000);
             }
         }
 
@@ -379,7 +391,8 @@
                     'no_code': 'لم يتم استلام رمز المصادقة',
                     'no_token': 'فشل في الحصول على رمز الوصول',
                     'auth_failed': 'فشل في المصادقة',
-                    'user_save_failed': 'فشل في حفظ بيانات المستخدم'
+                    'user_save_failed': 'فشل في حفظ بيانات المستخدم',
+                    'guest_login_failed': 'فشل في الدخول كضيف'
                 };
 
                 showAlert(errorMessages[error] || `حدث خطأ: ${error}`, 'error');
@@ -395,9 +408,28 @@
             }
         }
 
+        // فحص حالة المستخدم الحالي
+        async function checkCurrentUser() {
+            try {
+                const response = await fetch('/api/user/status');
+                if (response.ok) {
+                    const user = await response.json();
+                    if (user.isLoggedIn) {
+                        showAlert('أنت مسجل دخول بالفعل!', 'info');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 2000);
+                    }
+                }
+            } catch (error) {
+                // تجاهل الخطأ - المستخدم غير مسجل دخول
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             checkUrlErrors();
             checkSuccessMessages();
+            checkCurrentUser();
 
             setTimeout(() => {
                 document.querySelector('.login-container').style.opacity = '1';
@@ -408,6 +440,24 @@
         document.querySelector('.login-container').style.opacity = '0';
         document.querySelector('.login-container').style.transform = 'translateY(20px)';
         document.querySelector('.login-container').style.transition = 'all 0.5s ease';
+
+        // إضافة مستمع للأخطاء العامة
+        window.addEventListener('error', function(event) {
+            console.error('خطأ في الصفحة:', event.error);
+        });
+
+        // تحسين تجربة المستخدم للأجهزة المحمولة
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/service-worker.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker مسجل: ', registration.scope);
+                    })
+                    .catch(function(error) {
+                        console.log('فشل تسجيل ServiceWorker: ', error);
+                    });
+            });
+        }
     </script>
 </body>
 </html>

@@ -2,35 +2,32 @@ import sqlite3
 import os
 import requests
 import time
-from flask import Flask, request, jsonify, g, session, redirect, url_for, render_template, send_from_directory
+from flask import Flask, request, jsonify, session, redirect, send_from_directory
 from datetime import datetime, timezone
 import hashlib
 import secrets
 from dotenv import load_dotenv
 import PyPDF2
-import io
 import docx
-from bs4 import BeautifulSoup
 
 # Load environment
 load_dotenv()
-DB_PATH = ":memory:"
+
 # API Keys
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
-SECRET_KEY = os.getenv("SECRET_KEY", "clainai-super-secret-key-2024-pro-max")
-SERPER_API_KEY = os.getenv("SERPER_API_KEY", "4991d46dbad619689eda07dafef0665d12c1a2db")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 # GitHub OAuth Configuration
-
-GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "Ov23lihMk0lVKB9t8CGm")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "9c843fa45f6ea8abfc82774b1395d98a3a925dee")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 # Google OAuth Configuration
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "77933091754-idsptg4osou4ipj9r434sdg8rpmb6289.apps.googleusercontent.com")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "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")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 # استخدام قاعدة بيانات في الذاكرة لـ Vercel
-DB_PATH = "clainai.db"
+DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
 # Auto-detect environment and set base URL
 def get_base_url():
@@ -55,26 +52,18 @@ app.config.update(
     JSON_AS_ASCII=False
 )
 
-# CORS headers for file upload
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
-
 print("=" * 60)
 print("🚀 ClainAI - المساعد الذكي الإبداعي المتقدم!")
 print("=" * 60)
 print(f"📍 Base URL: {BASE_URL}")
-print(f"🔑 OpenRouter Key: {OPENROUTER_API_KEY[:20]}...")
+print(f"🔑 OpenRouter Key: {OPENROUTER_API_KEY[:20] if OPENROUTER_API_KEY else 'None'}...")
 print(f"🔍 Serper Search: {'✅' if SERPER_API_KEY else '❌'}")
 print(f"🔐 GitHub OAuth: {'✅' if GITHUB_CLIENT_ID else '❌'}")
 print(f"🔐 Google OAuth: {'✅' if GOOGLE_CLIENT_ID else '❌'}")
 print(f"📄 PDF Support: ✅")
 print(f"📝 Word Support: ✅")
 print(f"🖼️ Image Analysis: ✅")
-print(f"👑 Developer: محمد عبدو - mohammedu3615@gmail.com")
+print(f"👑 Developer: محمد عبد القادر السراج - mohammedu3615@gmail.com")
 
 # دالة الاتصال بقاعدة البيانات
 def get_db_connection():
@@ -97,7 +86,7 @@ def get_db_connection():
 # تهيئة قاعدة البيانات
 def init_db():
     conn = get_db_connection()
-    
+
     # جدول المستخدمين
     conn.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -151,6 +140,14 @@ def init_db():
     conn.close()
     print("✅ تم إنشاء قاعدة البيانات بنجاح")
 
+# CORS headers
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 # Routes
 @app.route("/")
 def index():
@@ -186,7 +183,7 @@ def serve_favicon():
 def guest_login():
     try:
         user_id = f"guest_{secrets.token_hex(8)}"
-        
+
         conn = get_db_connection()
         conn.execute(
             'INSERT OR IGNORE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
@@ -199,18 +196,24 @@ def guest_login():
         session['user_name'] = 'ضيف'
         session['user_role'] = 'user'
         
-        return jsonify({
-            'success': True,
-            'user': {
-                'id': user_id,
-                'name': 'ضيف',
-                'role': 'user'
-            }
-        })
-        
+        if request.method == 'POST':
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': user_id,
+                    'name': 'ضيف',
+                    'role': 'user'
+                }
+            })
+        else:
+            return redirect('/')
+            
     except Exception as e:
         print(f"❌ خطأ في تسجيل الدخول كضيف: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        if request.method == 'POST':
+            return jsonify({'error': str(e)}), 500
+        else:
+            return redirect('/login?error=guest_login_failed')
 
 # GitHub OAuth
 @app.route('/api/auth/github')
@@ -229,8 +232,7 @@ def github_callback():
         code = request.args.get('code')
         if not code:
             return redirect('/login?error=github_auth_failed')
-        
-        # استبدال code بـ access token
+
         token_response = requests.post(
             'https://github.com/oauth/access_token',
             headers={'Accept': 'application/json'},
@@ -241,14 +243,12 @@ def github_callback():
                 'redirect_uri': GITHUB_REDIRECT_URI
             }
         )
-        
         token_data = token_response.json()
         access_token = token_data.get('access_token')
         
         if not access_token:
             return redirect('/login?error=github_token_failed')
-        
-        # الحصول على بيانات المستخدم
+            
         user_response = requests.get(
             'https://api.github.com/user',
             headers={'Authorization': f'token {access_token}'}
@@ -259,7 +259,6 @@ def github_callback():
         user_name = user_data.get('name', user_data.get('login', 'مستخدم GitHub'))
         user_email = user_data.get('email', f"{user_data['login']}@github.com")
         
-        # حفظ المستخدم في قاعدة البيانات
         conn = get_db_connection()
         conn.execute(
             'INSERT OR REPLACE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
@@ -268,7 +267,6 @@ def github_callback():
         conn.commit()
         conn.close()
         
-        # حفظ في الجلسة
         session['user_id'] = user_id
         session['user_name'] = user_name
         session['user_role'] = 'user'
@@ -298,8 +296,7 @@ def google_callback():
         code = request.args.get('code')
         if not code:
             return redirect('/login?error=google_auth_failed')
-        
-        # استبدال code بـ access token
+
         token_response = requests.post(
             'https://oauth2.googleapis.com/token',
             data={
@@ -310,14 +307,12 @@ def google_callback():
                 'redirect_uri': GOOGLE_REDIRECT_URI
             }
         )
-        
         token_data = token_response.json()
         access_token = token_data.get('access_token')
         
         if not access_token:
             return redirect('/login?error=google_token_failed')
-        
-        # الحصول على بيانات المستخدم
+            
         user_response = requests.get(
             'https://www.googleapis.com/oauth2/v2/userinfo',
             headers={'Authorization': f'Bearer {access_token}'}
@@ -328,7 +323,6 @@ def google_callback():
         user_name = user_data.get('name', 'مستخدم Google')
         user_email = user_data.get('email', f"{user_data['id']}@google.com")
         
-        # حفظ المستخدم في قاعدة البيانات
         conn = get_db_connection()
         conn.execute(
             'INSERT OR REPLACE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
@@ -337,7 +331,6 @@ def google_callback():
         conn.commit()
         conn.close()
         
-        # حفظ في الجلسة
         session['user_id'] = user_id
         session['user_name'] = user_name
         session['user_role'] = 'user'
@@ -373,9 +366,9 @@ def extract_text_from_docx(file):
 # البحث في الويب
 def perform_web_search(query):
     try:
-        if not SERPER_API_KEY or SERPER_API_KEY == "your_serper_api_key_here":
+        if not SERPER_API_KEY:
             return {"error": "مفتاح البحث غير مضبوط"}
-        
+
         response = requests.post(
             'https://google.serper.dev/search',
             headers={
@@ -389,14 +382,13 @@ def perform_web_search(query):
             data = response.json()
             results = []
             
-            # استخراج النتائج
             for organic in data.get('organic', [])[:3]:
                 results.append({
                     'title': organic.get('title', ''),
                     'link': organic.get('link', ''),
                     'snippet': organic.get('snippet', '')
                 })
-            
+                
             return results
         else:
             return {"error": f"خطأ في البحث: {response.status_code}"}
@@ -404,52 +396,59 @@ def perform_web_search(query):
     except Exception as e:
         return {"error": f"خطأ في خدمة البحث: {str(e)}"}
 
-# سجل المحادثات (مطلوب من الـ JavaScript)
-@app.route("/api/history")
-def get_history():
-    try:
-        user_id = session.get('user_id')
-        if not user_id:
-            return jsonify([])
-        
-        conn = get_db_connection()
-        conversations = conn.execute(
-            'SELECT message, reply, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
-            (user_id,)
-        ).fetchall()
-        conn.close()
-        
-        result = []
-        for conv in conversations:
-            result.append({
-                'role': 'user',
-                'content': conv['message']
-            })
-            result.append({
-                'role': 'assistant', 
-                'content': conv['reply']
-            })
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify([])
-
 # الدردشة مع الذكاء الاصطناعي
 @app.route("/api/chat", methods=["POST"])
 def chat():
     try:
         data = request.json
         message = data.get('message', '').strip()
-        
+
         if not message:
             return jsonify({'error': 'الرسالة فارغة'}), 400
         
         user_id = session.get('user_id', 'guest')
         
+        # التحقق إذا كان السؤال عن المطور
+        developer_keywords = ['مطور', 'مبرمج', 'صاحب', 'خالق', 'من صنع', 'who made you', 'developer', 'creator', 'who created you', 'برمجة', 'صنع', 'مين']
+        message_lower = message.lower()
+        
+        if any(keyword in message_lower for keyword in developer_keywords):
+            developer_info = """
+✅ **تم تطويري بواسطة المهندس السوداني محمد عبد القادر السراج**
+
+🎓 **المؤهلات العلمية:**
+• خريج جامعة العلوم وتقانة المعلومات (IT)
+• خريج تكنولوجيا المعلومات والاتصالات (ICT)
+
+📧 **البريد الإلكتروني:** mohammedu3615@gmail.com
+
+🎯 **المطور يعرفني جيداً** وقام ببرمجتي لتقديم أفضل الخدمات للمستخدمين في مجال الذكاء الاصطناعي والمساعدة الذكية.
+
+🌟 **مميزات النظام:**
+- دعم متعدد اللغات
+- تحليل الملفات (PDF, Word)
+- البحث الذكي في الويب
+- تحليل الصور
+- واجهة مستخدم متطورة
+            """
+            
+            conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
+            conn = get_db_connection()
+            conn.execute(
+                'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
+                (conversation_id, user_id, message, developer_info, "developer_info")
+            )
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'reply': developer_info,
+                'model_used': 'developer_info'
+            })
+
         print(f"🧠 استخدام النماذج المتقدمة للرد الإبداعي...")
         
-        # قائمة النماذج المتاحة
         models = [
             "meta-llama/llama-3-70b-instruct:nitro",
             "openai/gpt-3.5-turbo", 
@@ -463,7 +462,6 @@ def chat():
         for model in models:
             try:
                 print(f"🧠 جرب النموذج: {model}")
-                
                 response = requests.post(
                     "https://openrouter.ai/api/v1/chat/completions",
                     headers={
@@ -475,7 +473,7 @@ def chat():
                         "model": model,
                         "messages": [
                             {
-                                "role": "user",
+                                "role": "user", 
                                 "content": f"أنت مساعد ذكي عربي. أجب بطريقة مفيدة وإبداعية.\n\nالسؤال: {message}"
                             }
                         ],
@@ -504,9 +502,7 @@ def chat():
         result = response.json()
         reply = result['choices'][0]['message']['content']
         
-        # حفظ المحادثة في قاعدة البيانات
         conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
-        
         conn = get_db_connection()
         conn.execute(
             'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
@@ -531,16 +527,15 @@ def upload_file():
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
-        
+
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
-        
+            
         file_extension = file.filename.lower().split('.')[-1]
         file_content = ""
         file_type = "text"
         
-        # معالجة不同类型的 الملفات
         if file_extension == 'pdf':
             file_content = extract_text_from_pdf(file)
             file_type = "pdf"
@@ -548,11 +543,9 @@ def upload_file():
             file_content = extract_text_from_docx(file)
             file_type = "word"
         else:
-            # الملفات النصية
             file_content = file.read().decode('utf-8', errors='ignore')
             file_type = "text"
         
-        # حفظ في قاعدة البيانات
         user_id = session.get('user_id', 'guest')
         file_id = hashlib.md5(f"{user_id}_{datetime.now().timestamp()}".encode()).hexdigest()
         
@@ -564,7 +557,6 @@ def upload_file():
         conn.commit()
         conn.close()
         
-        # حفظ file_id في session
         session['current_file_id'] = file_id
         
         return jsonify({
@@ -586,30 +578,27 @@ def ask_about_file():
     try:
         data = request.json
         question = data.get('question', '')
-        
-        # جلب file_id من session
+
         file_id = session.get('current_file_id')
         if not file_id:
             return jsonify({'error': 'No file uploaded. Please upload a file first.'}), 400
-        
-        # جلب المحتوى من database
+            
         conn = get_db_connection()
         file_data = conn.execute(
-            'SELECT filename, content, file_type FROM uploaded_files WHERE id = ?', (file_id,)
+            'SELECT filename, content, file_type FROM uploaded_files WHERE id = ?',
+            (file_id,)
         ).fetchone()
         conn.close()
         
         if not file_data:
             return jsonify({'error': 'File not found. Please upload again.'}), 404
-        
+            
         file_content = file_data['content']
         file_type = file_data['file_type']
         
-        # prompt مخصص لتحليل الملف
         analysis_prompt = f"""
         الملف: {file_data['filename']} (نوع: {file_type})
-        محتوى الملف:
-        {file_content[:4000]}
+        محتوى الملف: {file_content[:4000]}
         
         السؤال: {question}
         
@@ -617,7 +606,6 @@ def ask_about_file():
         إذا لم تجد الإجابة في الملف، قل أن المعلومات غير موجودة.
         """
         
-        # إرسال للذكاء الاصطناعي
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -651,17 +639,17 @@ def ask_about_file():
         print(f"Server Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# تحليل الصور (بناءً على وصف المستخدم)
+# تحليل الصور
 @app.route("/api/analyze-image", methods=["POST"])
 def analyze_image():
     try:
         data = request.json
         image_description = data.get('description', '').strip()
         question = data.get('question', '').strip()
-        
+
         if not image_description:
             return jsonify({'error': 'يجب تقديم وصف للصورة'}), 400
-        
+            
         prompt = f"""
         المستخدم وصف هذه الصورة: {image_description}
         
@@ -671,7 +659,6 @@ def analyze_image():
         كن دقيقاً في التحليل وقدم معلومات قيمة.
         """
         
-        # إرسال للـ AI
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -690,7 +677,7 @@ def analyze_image():
         if response.status_code == 200:
             ai_response = response.json()['choices'][0]['message']['content']
             return jsonify({
-                'success': True, 
+                'success': True,
                 'analysis': ai_response,
                 'description': image_description,
                 'question': question
@@ -708,19 +695,17 @@ def web_search():
     try:
         data = request.json
         query = data.get('query', '').strip()
-        
+
         if not query:
             return jsonify({'error': 'استعلام البحث فارغ'}), 400
-        
+            
         print(f"🔍 البحث في الويب عن: {query}")
         
-        # تنفيذ البحث
         search_results = perform_web_search(query)
         
         if 'error' in search_results:
             return jsonify({'error': search_results['error']}), 500
-        
-        # حفظ نتائج البحث
+            
         user_id = session.get('user_id', 'guest')
         search_id = hashlib.md5(f"{user_id}_{query}_{datetime.now().timestamp()}".encode()).hexdigest()
         
@@ -748,21 +733,19 @@ def search_and_answer():
     try:
         data = request.json
         query = data.get('query', '').strip()
-        
+
         if not query:
             return jsonify({'error': 'استعلام البحث فارغ'}), 400
-        
-        # البحث أولاً
+            
         search_results = perform_web_search(query)
         
         if 'error' in search_results:
             return jsonify({'error': search_results['error']}), 500
-        
-        # بناء prompt مع نتائج البحث
+            
         search_context = ""
         for i, result in enumerate(search_results, 1):
             search_context += f"{i}. {result['title']}\n   {result['snippet']}\n\n"
-        
+            
         prompt = f"""
         استعلام البحث: {query}
         
@@ -773,7 +756,6 @@ def search_and_answer():
         أشر إلى المصادر عندما يكون ذلك مناسباً.
         """
         
-        # إرسال للـ AI
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -791,7 +773,6 @@ def search_and_answer():
         
         if response.status_code == 200:
             ai_response = response.json()['choices'][0]['message']['content']
-            
             return jsonify({
                 'success': True,
                 'answer': ai_response,
@@ -805,14 +786,14 @@ def search_and_answer():
         print(f"❌ خطأ في البحث الذكي: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# الحصول على سجل المحادثة (للتوافق مع الاسم القديم)
-@app.route("/api/conversation")
-def get_conversation():
+# سجل المحادثات
+@app.route("/api/history")
+def get_history():
     try:
         user_id = session.get('user_id')
         if not user_id:
             return jsonify([])
-        
+
         conn = get_db_connection()
         conversations = conn.execute(
             'SELECT message, reply, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
@@ -830,9 +811,8 @@ def get_conversation():
                 'role': 'assistant', 
                 'content': conv['reply']
             })
-        
+            
         return jsonify(result)
-        
     except Exception as e:
         return jsonify([])
 
@@ -842,7 +822,7 @@ def user_status():
     user_id = session.get('user_id')
     user_name = session.get('user_name', 'ضيف')
     user_role = session.get('user_role', 'user')
-    
+
     return jsonify({
         'id': user_id,
         'name': user_name,
@@ -850,13 +830,13 @@ def user_status():
         'isLoggedIn': bool(user_id)
     })
 
-# معلومات المستخدم (مطلوب من الـ JavaScript)
+# معلومات المستخدم
 @app.route("/api/user")
 def get_user():
     user_id = session.get('user_id')
     user_name = session.get('user_name', 'ضيف')
     user_role = session.get('user_role', 'user')
-    
+
     return jsonify({
         'id': user_id,
         'name': user_name,
@@ -871,13 +851,12 @@ def clear_chat():
         user_id = session.get('user_id')
         if not user_id:
             return jsonify({'success': True})
-        
+
         conn = get_db_connection()
         conn.execute('DELETE FROM conversations WHERE user_id = ?', (user_id,))
         conn.commit()
         conn.close()
         
-        # مسح ملفات المستخدم أيضاً
         conn = get_db_connection()
         conn.execute('DELETE FROM uploaded_files WHERE user_id = ?', (user_id,))
         conn.commit()
@@ -886,7 +865,6 @@ def clear_chat():
         session.pop('current_file_id', None)
         
         return jsonify({'success': True})
-        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -899,9 +877,13 @@ def logout():
     else:
         return redirect('/login')
 
+@app.route("/api/conversation")
+def get_conversation():
+    return get_history()
+
 if __name__ == "__main__":
     with app.app_context():
         init_db()
-    print(f"🌐 **التطبيق جاهز على:** {BASE_URL}")
-    print("👑 **المطور:** محمد عبدو - mohammedu3615@gmail.com")
+        print(f"🌐 التطبيق جاهز على: {BASE_URL}")
+        print("👑 المطور: محمد عبد القادر السراج - mohammedu3615@gmail.com")
     app.run(host='0.0.0.0', port=5000, debug=False)
