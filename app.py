@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 
 # Load environment
 load_dotenv()
-DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
+DB_PATH = ":memory:"
 # API Keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
 SECRET_KEY = os.getenv("SECRET_KEY", "clainai-super-secret-key-2024-pro-max")
