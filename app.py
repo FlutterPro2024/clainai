@@ -29,28 +29,18 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # استخدام قاعدة بيانات في الذاكرة لـ Vercel
 DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
-# Auto-detect environment and set base URL
+# Auto-detect environment and set base URL - معدل
 def get_base_url():
     if 'VERCEL' in os.environ:
-        return 'https://clainai-deploy.vercel.app'
+        # استخدم الرابط الفعلي للتطبيق على Vercel
+        vercel_url = os.getenv('VERCEL_URL', 'clainai-deploy-lvd0xh60k-flutterpro2024s-projects.vercel.app')
+        return f'https://{vercel_url}'
     else:
         return 'http://localhost:5000'
 
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
 GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
-
-app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.secret_key = SECRET_KEY
-
-# إعدادات الجلسة الآمنة
-app.config.update(
-    SESSION_COOKIE_SECURE=True,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=86400,
-    JSON_AS_ASCII=False
-)
 
 print("=" * 60)
 print("🚀 ClainAI - المساعد الذكي الإبداعي المتقدم!")
@@ -65,16 +55,19 @@ print(f"📝 Word Support: ✅")
 print(f"🖼️ Image Analysis: ✅")
 print(f"👑 Developer: محمد عبد القادر السراج - mohammedu3615@gmail.com")
 
-# دالة الاتصال بقاعدة البيانات
-def get_db_connection():
-    attempts = 0
-    while attempts < 5:
-        try:
-            conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=30000")
-            return conn
+app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.secret_key = SECRET_KEY
+
+# إعدادات الجلسة الآمنة
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=86400,
+    JSON_AS_ASCII=False
+)
+
+# باقي الكود كما هو...
         except sqlite3.OperationalError as e:
             if "locked" in str(e):
                 attempts += 1
