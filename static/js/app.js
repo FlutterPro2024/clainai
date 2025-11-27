@@ -2,17 +2,21 @@ class ClainAIChat {
     constructor() {
         this.currentSession = {
             messages: [],
-            isLoading: false,                                  user: null,
-            typing: false
+            isLoading: false,
+            user: null,
+            typing: false,
+            hasUploadedFile: false
         };
         this.init();
-    }                                              
+    }
+
     // التهيئة
     async init() {
         console.log('🚀 تهيئة ClainAI...');
         await this.loadUserInfo();
         await this.loadChatHistory();
         this.setupEventListeners();
+        this.addFileUploadButton();
         this.showWelcomeMessage();
         console.log('✅ تم تهيئة ClainAI بنجاح!');
     }
@@ -56,6 +60,112 @@ class ClainAIChat {
         }
     }
 
+    // دالة رفع الملف
+    async uploadFile(file) {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.currentSession.hasUploadedFile = true;
+                this.showNotification('✅ تم رفع الملف بنجاح! يمكنك الآن السؤال عنه', 'success');
+                return result;
+            } else {
+                throw new Error(result.error || 'فشل في رفع الملف');
+            }
+        } catch (error) {
+            console.error('❌ خطأ في رفع الملف:', error);
+            this.showNotification(`❌ خطأ في رفع الملف: ${error.message}`, 'error');
+            throw error;
+        }
+    }
+
+    // دالة السؤال عن الملف
+    async askAboutFile(question) {
+        try {
+            const response = await fetch('/api/ask-about-file', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ question: question })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result;
+            } else {
+                throw new Error(result.error || 'فشل في الحصول على إجابة');
+            }
+        } catch (error) {
+            console.error('❌ خطأ في السؤال عن الملف:', error);
+            this.showNotification(`❌ خطأ في السؤال عن الملف: ${error.message}`, 'error');
+            throw error;
+        }
+    }
+
+    // معالجة رفع الملف من الواجهة
+    handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        // عرض رسالة تحميل
+        this.addMessageToUI('assistant', `📁 جاري تحليل الملف: **${file.name}**...`);
+        
+        this.uploadFile(file)
+            .then(result => {
+                this.addMessageToUI('assistant', 
+                    `✅ **تم رفع الملف بنجاح!**\n\n` +
+                    `📄 **اسم الملف:** ${result.filename}\n` +
+                    `📊 **الحجم:** ${result.size} حرف\n\n` +
+                    `💡 **يمكنك الآن السؤال عن محتوى الملف!**\n` +
+                    `جرب:\n` +
+                    `• "ما هي النقاط الرئيسية؟"\n` +
+                    `• "اشرح محتوى الملف"\n` +
+                    `• "ما هي العناوين الرئيسية؟"`
+                );
+            })
+            .catch(error => {
+                this.addMessageToUI('error', `❌ فشل في رفع الملف: ${error.message}`);
+            });
+    }
+
+    // إرسال سؤال عن الملف
+    async sendFileQuestion(question) {
+        if (!question.trim()) return;
+        
+        // إضافة سؤال المستخدم
+        this.addMessageToUI('user', question);
+        
+        // عرض مؤشر الكتابة
+        this.showTypingIndicator();
+        
+        try {
+            const result = await this.askAboutFile(question);
+            this.hideTypingIndicator();
+            this.addMessageToUI('assistant', result.answer);
+        } catch (error) {
+            this.hideTypingIndicator();
+            this.addMessageToUI('error', `❌ خطأ في الحصول على إجابة: ${error.message}`);
+        }
+    }
+
+    // الكشف إذا كان السؤال عن ملف
+    isFileQuestion(message) {
+        if (!this.currentSession.hasUploadedFile) return false;
+        
+        const fileKeywords = ['الملف', 'محتوى', 'المستند', 'الوثيقة', 'الرفع', 'رفعت', 'المرفوع', 'الذي رفعته', 'الملف المرفوع'];
+        return fileKeywords.some(keyword => message.includes(keyword));
+    }
+
     // إرسال رسالة
     async sendMessage() {
         const messageInput = document.getElementById('messageInput');
@@ -69,6 +179,13 @@ class ClainAIChat {
         const message = messageInput.value.trim();
 
         if (!message || this.currentSession.isLoading) {
+            return;
+        }
+
+        // التحقق إذا كان سؤال عن ملف
+        if (this.isFileQuestion(message)) {
+            await this.sendFileQuestion(message);
+            messageInput.value = '';
             return;
         }
 
@@ -304,7 +421,9 @@ class ClainAIChat {
                     '• الإجابة على أسئلتك العلمية  🧪\n' +
                     '• شرح المفاهيم التقنية 💻\n' +
                     '• تقديم معلومات ثقافية 🌍\n' +
-                    '• المساعدة في البرمجة والتطوير 🔧\n\n' +
+                    '• المساعدة في البرمجة والتطوير 🔧\n' +
+                    '• تحليل الملفات النصية 📄\n\n' +
+                    '**📁 يمكنك رفع ملف نصي ثم السؤال عنه!**\n\n' +
                     '**🎯 جرب هذه الأسئلة:**\n' +
                     '• "ما هو الذكاء الاصطناعي?"\n' +
                     '• "اشرح الحوسبة السحابية"\n' +
@@ -329,6 +448,7 @@ class ClainAIChat {
                 if (chatContainer) {
                     chatContainer.innerHTML = '';
                     this.currentSession.messages = [];
+                    this.currentSession.hasUploadedFile = false;
                     this.showWelcomeMessage();
                 }
                 this.showNotification('تم مسح المحادثة بنجاح', 'success');
@@ -395,6 +515,10 @@ class ClainAIChat {
                     cursor: pointer;
                     font-size: 16px;
                 }
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
             `;
             document.head.appendChild(styles);
         }
@@ -407,6 +531,43 @@ class ClainAIChat {
                 notification.remove();
             }
         }, 3000);
+    }
+
+    // إضافة زر رفع الملف للواجهة
+    addFileUploadButton() {
+        const chatInputContainer = document.querySelector('.chat-input-container');
+        if (!chatInputContainer) return;
+        
+        // التحقق إذا كان الزر موجود مسبقاً
+        if (document.getElementById('fileUploadBtn')) return;
+        
+        const fileHtml = `
+            <div class="file-upload-section">
+                <input type="file" id="fileInput" style="display: none;" accept=".txt,.pdf,.doc,.docx,.py,.js,.html,.css,.json,.md">
+                <button type="button" id="fileUploadBtn" class="file-upload-btn" title="رفع ملف">
+                    📁 رفع ملف
+                </button>
+                <span id="fileName" class="file-name"></span>
+            </div>
+        `;
+        
+        // إضافة زر رفع الملف قبل حقل الإدخال
+        chatInputContainer.insertAdjacentHTML('afterbegin', fileHtml);
+        
+        // إضافة مستمع حدث للزر
+        document.getElementById('fileUploadBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+        
+        // تحديث اسم الملف عند الاختيار
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const fileName = document.getElementById('fileName');
+            if (e.target.files.length > 0) {
+                fileName.textContent = e.target.files[0].name;
+            } else {
+                fileName.textContent = '';
+            }
+        });
     }
 
     // إعداد مستمعي الأحداث
@@ -424,6 +585,12 @@ class ClainAIChat {
 
         if (sendButton) {
             sendButton.addEventListener('click', () => this.sendMessage());
+        }
+
+        // إضافة مستمع لرفع الملفات
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
         }
 
         // تحديث تلقائي للوقت
@@ -468,3 +635,5 @@ if ('serviceWorker' in navigator) {
 window.sendMessage = function() { window.clainai?.sendMessage(); }
 window.clearChat = function() { window.clainai?.clearChat(); }
 window.logout = function() { window.clainai?.logout(); }
+window.uploadFile = function(file) { return window.clainai?.uploadFile(file); }
+window.askAboutFile = function(question) { return window.clainai?.askAboutFile(question); }
