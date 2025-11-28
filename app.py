@@ -46,11 +46,11 @@ def get_base_url():
     vercel_url = os.environ.get('VERCEL_URL')
     if vercel_url:
         return f"https://{vercel_url}"
-    
+
     vercel_git_repo_slug = os.environ.get('VERCEL_GIT_REPO_SLUG')
     if vercel_git_repo_slug:
         return f"https://{vercel_git_repo_slug}.vercel.app"
-    
+
     # Fallback إلى اسم افتراضي
     return "https://clainai-deploy.vercel.app"
 
@@ -59,7 +59,7 @@ GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
 GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.secret_key = SECRET_KEY
+app.secret_key = SECRET_KEY or "fallback-secret-key-for-development"
 
 # إعدادات الجلسة الآمنة
 app.config.update(
@@ -128,10 +128,10 @@ def get_ai_response(message, model_type="google"):
     """
     try:
         model = AI_MODELS.get(model_type, AI_MODELS["google"])
-        
+
         if not model["enabled"]:
             raise Exception(f"النموذج غير مفعل - {model['name']}")
-        
+
         if model_type == "google":
             return get_google_response(message, model)
         elif model_type == "openai":
@@ -142,7 +142,7 @@ def get_ai_response(message, model_type="google"):
             return get_llama_response(message, model)
         else:
             return get_fallback_response(message)
-            
+
     except Exception as e:
         print(f"❌ خطأ في النموذج {model_type}: {str(e)}")
         raise e
@@ -152,7 +152,7 @@ def get_google_response(message, model):
     headers = {
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "contents": [{
             "parts": [{
@@ -172,10 +172,10 @@ def get_google_response(message, model):
             }
         ]
     }
-    
+
     url = f"{model['endpoint']}?key={model['key']}"
     response = requests.post(url, headers=headers, json=payload, timeout=30)
-    
+
     if response.status_code == 200:
         result = response.json()
         if 'candidates' in result and result['candidates']:
@@ -191,7 +191,7 @@ def get_openai_response(message, model):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {model['key']}"
     }
-    
+
     payload = {
         "model": "gpt-4",
         "messages": [
@@ -207,7 +207,7 @@ def get_openai_response(message, model):
         "temperature": 0.7,
         "max_tokens": 2000
     }
-    
+
     response = requests.post(model["endpoint"], headers=headers, json=payload, timeout=30)
     if response.status_code == 200:
         result = response.json()
@@ -222,7 +222,7 @@ def get_claude_response(message, model):
         "x-api-key": model['key'],
         "anthropic-version": "2023-06-01"
     }
-    
+
     payload = {
         "model": "claude-3-sonnet-20240229",
         "max_tokens": 2000,
@@ -234,7 +234,7 @@ def get_claude_response(message, model):
             }
         ]
     }
-    
+
     response = requests.post(model["endpoint"], headers=headers, json=payload, timeout=30)
     if response.status_code == 200:
         result = response.json()
@@ -250,7 +250,7 @@ def get_llama_response(message, model):
         "HTTP-Referer": f"{BASE_URL}",
         "X-Title": "ClainAI Chat"
     }
-    
+
     payload = {
         "model": "meta-llama/llama-3-70b-instruct",
         "messages": [
@@ -266,7 +266,7 @@ def get_llama_response(message, model):
         "temperature": 0.7,
         "max_tokens": 2000
     }
-    
+
     response = requests.post(model["endpoint"], headers=headers, json=payload, timeout=30)
     if response.status_code == 200:
         result = response.json()
@@ -278,19 +278,19 @@ def get_fallback_response(message):
     """رد احتياطي عندما تفشل جميع النماذج"""
     fallback_responses = {
         "من هو مطورك": "أنا ClainAI، تم تطويري بواسطة المهندس السوداني محمد عبد القادر السراج - خريج جامعة العلوم وتقانة المعلومات (IT) وخريج تكنولوجيا المعلومات والاتصالات (ICT). أسعى دائماً لتقديم أفضل تجربة للمستخدمين العرب من خلال دمج أحدث تقنيات الذكاء الاصطناعي. 📧 البريد: mohammedu3615@gmail.com",
-        
+
         "ماهو الذكاء الاصطناعي": "الذكاء الاصطناعي (Artificial Intelligence) هو مجال من مجالات علوم الكمبيوتر يهتم بتطوير أنظمة قادرة على أداء مهام تتطلب ذكاءً بشرياً مثل:\n\n• 🤖 **التعلم** (Learning): قدرة النظام على تحسين أدائه من خلال التجربة\n• 💭 **التفكير** (Reasoning): القدرة على استنتاج النتائج المنطقية\n• 🔍 **حل المشكلات** (Problem Solving): إيجاد حلول للتحديات المعقدة\n• 📊 **الإدراك** (Perception): فهم وتحليل البيانات من البيئة المحيطة\n• 💬 **فهم اللغة** (Language Understanding): معالجة وفهم اللغات البشرية\n\nيشمل الذكاء الاصطناعي مجالات فرعية مثل التعلم الآلي، الشبكات العصبية، الرؤية الحاسوبية، ومعالجة اللغة الطبيعية.",
-        
+
         "ما هي المجالات": "مجالات الذكاء الاصطناعي تشمل:\n\n🎯 **المجالات الرئيسية:**\n• التعلم الآلي (Machine Learning)\n• الشبكات العصبية (Neural Networks)\n• معالجة اللغة الطبيعية (NLP)\n• الرؤية الحاسوبية (Computer Vision)\n• الروبوتات (Robotics)\n• الأنظمة الخبيرة (Expert Systems)\n• التعلم العميق (Deep Learning)\n\n💼 **التطبيقات العملية:**\n• المساعدات الذكية (مثل ClainAI)\n• السيارات ذاتية القيادة\n• التشخيص الطبي\n• التوصيات الذكية\n• الترجمة الآلية\n• الأمن السيبراني",
-        
+
         "عرف الحوسبة السحابية": "الحوسبة السحابية (Cloud Computing) هي نموذج لتقديم خدمات حاسوبية عبر الإنترنت تشمل:\n\n☁️ **الخدمات الأساسية:**\n• **الخوادم** (Servers): قوة معالجة مرنة\n• **التخزين** (Storage): مساحة تخزين غير محدودة\n• **قواعد البيانات** (Databases): أنواع متعددة من قواعد البيانات\n• **الشبكات** (Networking): بنية تحتية شبكية متطورة\n• **البرمجيات** (Software): تطبيقات جاهزة للاستخدام\n\n🎯 **نماذج الخدمة:**\n• **IaaS** (البنية التحتية كخدمة)\n• **PaaS** (المنصة كخدمة)  \n• **SaaS** (البرمجيات كخدمة)\n\n💫 **المزايا:**\n• توفير التكاليف\n• المرونة والتوسع\n• الأمان المتقدم\n• الابتكار السريع\n• تحديثات تلقائية"
     }
-    
+
     # البحث عن رد مناسب
     for key, response in fallback_responses.items():
         if key in message:
             return response
-    
+
     # رد عام إذا لم يتم العثور على تطابق
     return "شكراً لسؤالك! 🤖 أنا ClainAI - مساعد ذكي عربي. حالياً، أحتاج إلى تكوين مفاتيح API للنماذج المتقدمة (جوجل Gemini، OpenAI، Claude) لتقديم إجابات أكثر دقة وإبداعية. يمكنك إضافة هذه المفاتيح في إعدادات التطبيق لتفعيل الإجابات الذكية المتقدمة! 💡"
 
@@ -299,10 +299,10 @@ def get_smart_response(message):
     الحصول على رد ذكي من أفضل نموذج متاح
     """
     enabled_models = [model_type for model_type, model in AI_MODELS.items() if model["enabled"]]
-    
+
     if not enabled_models:
         return get_fallback_response(message), "fallback"
-    
+
     # محاولة النماذج بالترتيب
     for model_type in enabled_models:
         try:
@@ -311,7 +311,7 @@ def get_smart_response(message):
         except Exception as e:
             print(f"❌ فشل النموذج {model_type}: {str(e)}")
             continue
-    
+
     # إذا فشلت جميع النماذج
     return get_fallback_response(message), "fallback"
 
@@ -401,6 +401,68 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
+
+# =============================================================================
+# 🔧 ROUTES الجديدة والمعدلة لإصلاح الأخطاء
+# =============================================================================
+
+@app.route("/api/status")
+def app_status():
+    """فحص الحالة العامة للتطبيق"""
+    return jsonify({
+        'status': 'running',
+        'app': 'ClainAI',
+        'version': '2.0.0',
+        'timestamp': datetime.now().isoformat(),
+        'database': 'connected',
+        'base_url': BASE_URL,
+        'ai_models': {
+            model: config["enabled"] 
+            for model, config in AI_MODELS.items()
+        },
+        'oauth': {
+            'github': bool(GITHUB_CLIENT_ID),
+            'google': bool(GOOGLE_CLIENT_ID)
+        }
+    })
+
+@app.route("/api/user/status", methods=["GET"])
+def user_status():
+    """فحص حالة المستخدم وجلسة العمل - إصلاح الخطأ 404"""
+    try:
+        user_info = {
+            'is_logged_in': False,
+            'user': None,
+            'session_active': False,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        if 'user_id' in session:
+            user_info['is_logged_in'] = True
+            user_info['session_active'] = True
+            user_info['user'] = {
+                'id': session.get('user_id'),
+                'name': session.get('user_name', 'User'),
+                'role': session.get('user_role', 'user')
+            }
+        
+        return jsonify({
+            'success': True,
+            'status': user_info,
+            'server_time': datetime.now().isoformat(),
+            'base_url': BASE_URL
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'status': {
+                'is_logged_in': False,
+                'session_active': False,
+                'user': None
+            }
+        }), 500
 
 # Routes الأساسية
 @app.route("/")
@@ -668,7 +730,7 @@ def upload_file():
 
             elif file_extension in ['.jpg', '.jpeg', '.png', '.gif']:
                 # معالجة الصور (وصف أساسي)
-                file_content = f"🖼️ صورة: {file.filename}\nالحجم: {len(file.read())} bytes\nتم رفع الصورة بنجاح، يمكنك سؤال ClainAI عن محتواها."
+                file_content = f"🖼️ صورة: {file.filename}\nالحجم: {len(file.read())} bytes\nتم رفع الصورة بنجاح، يمكنك الآن سؤال ClainAI عن محتواها."
 
             elif file_extension == '.txt':
                 # معالجة نصي
@@ -807,7 +869,7 @@ def get_news():
 قدم تلخيصاً واضحاً ومفيداً باللغة العربية يركز على النقاط الرئيسية بطريقة إبداعية ومفصلة."""
 
                     news_summary, model_used = get_smart_response(prompt)
-                    
+
                 except:
                     news_summary = "📰 **أهم أخبار اليوم:**\n\n"
                     for i, news in enumerate(news_items, 1):
@@ -990,14 +1052,14 @@ def chat():
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'غير مسجل الدخول'}), 401
-            
+
         data = request.json
         message = data.get('message', '').strip()
         use_search = data.get('use_search', False)
-        
+
         if not message:
             return jsonify({'error': 'الرسالة فارغة'}), 400
-            
+
         user_id = session['user_id']
         print(f"📩 رسالة مستلمة من {user_id}: {message}")
 
@@ -1006,7 +1068,7 @@ def chat():
         message_lower = message.lower()
         if any(keyword in message_lower for keyword in developer_keywords):
             developer_info = "🤖 **معلومات المطور:**\n\n✅ تم تطويري بواسطة **المهندس السوداني محمد عبد القادر السراج**\n🎓 **المؤهلات:**\n• خريج جامعة العلوم وتقانة المعلومات (IT)\n• خريج تكنولوجيا المعلومات والاتصالات (ICT)\n📧 **البريد الإلكتروني:** mohammedu3615@gmail.com\n\nأعمل دائماً على تطوير وتحسين أدائي لخدمة المستخدمين العرب بأفضل صورة! 💪"
-            
+
             conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
             conn = get_db_connection()
             conn.execute(
@@ -1015,10 +1077,10 @@ def chat():
             )
             conn.commit()
             conn.close()
-            
+
             return jsonify({
-                'success': True, 
-                'reply': developer_info, 
+                'success': True,
+                'reply': developer_info,
                 'model_used': 'developer_info',
                 'thinking': 'معلومات المطور'
             })
@@ -1027,7 +1089,7 @@ def chat():
         name_keywords = ['ما اسمك', 'اسمك', 'شو اسمك', 'عرف بنفسك', 'من انت', 'who are you', 'what is your name', 'شنا', 'شنا اسمك']
         if any(keyword in message_lower for keyword in name_keywords):
             name_reply = "🤖 **أنا ClainAI - المساعد الذكي العربي المتطور!**\n\n✨ **ما أقدمه لك:**\n• محادثات ذكية مثل ChatGPT\n• تحليل الملفات (PDF, Word, الصور)\n• بحث ذكي على الإنترنت\n• إجابات إبداعية ومفيدة\n• دعم متعدد النماذج الذكية\n\n🚀 **تم تطويري بواسطة المهندس محمد عبد القادر السراج** لخدمة المستخدمين العرب بكل احترافية وإبداع!"
-            
+
             conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
             conn = get_db_connection()
             conn.execute(
@@ -1036,10 +1098,10 @@ def chat():
             )
             conn.commit()
             conn.close()
-            
+
             return jsonify({
-                'success': True, 
-                'reply': name_reply, 
+                'success': True,
+                'reply': name_reply,
                 'model_used': 'name_info',
                 'thinking': 'معلومات الهوية'
             })
@@ -1066,7 +1128,7 @@ def chat():
         # استخدام النماذج الذكية المتقدمة للحصول على رد
         print("🔄 جاري الحصول على رد ذكي من النماذج المتاحة...")
         ai_reply, model_used = get_smart_response(message + search_context)
-        
+
         # إضافة علامة إذا تم استخدام البحث
         if search_context:
             ai_reply += "\n\n🔍 *تم دمج معلومات من البحث على الإنترنت*"
@@ -1114,7 +1176,7 @@ def get_models_info():
                 'enabled': model['enabled'],
                 'has_key': bool(model['key'])
             }
-        
+
         return jsonify({
             'success': True,
             'models': models_info,
@@ -1123,6 +1185,43 @@ def get_models_info():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# 🔧 ROUTES جديدة للتطبيقات الخارجية
+# =============================================================================
+
+@app.route("/api/apps", methods=["GET"])
+def get_apps():
+    """الحصول على قائمة التطبيقات المتاحة"""
+    return jsonify({
+        'success': True,
+        'apps': [
+            {
+                'name': 'ClainAI Chat',
+                'description': 'المساعد الذكي للمحادثات',
+                'url': '/',
+                'icon': '🤖'
+            },
+            {
+                'name': 'مدير الملفات',
+                'description': 'تحليل ومعالجة الملفات',
+                'url': '/files',
+                'icon': '📁'
+            },
+            {
+                'name': 'باحث الويب',
+                'description': 'البحث الذكي على الإنترنت',
+                'url': '/search',
+                'icon': '🔍'
+            },
+            {
+                'name': 'قارئ الأخبار',
+                'description': 'أحدث الأخبار والتحديثات',
+                'url': '/news',
+                'icon': '📰'
+            }
+        ]
+    })
 
 if __name__ == "__main__":
     with app.app_context():

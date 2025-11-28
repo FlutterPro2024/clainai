@@ -13,11 +13,27 @@ class ClainAIChat {
     // التهيئة
     async init() {
         console.log('🚀 تهيئة ClainAI...');
+        await this.checkServerStatus();
         await this.loadUserInfo();
         await this.loadChatHistory();
         this.setupEventListeners();
         this.showWelcomeMessage();
         console.log('✅ تم تهيئة ClainAI بنجاح!');
+    }
+
+    // فحص حالة السيرفر
+    async checkServerStatus() {
+        try {
+            const response = await fetch('/api/status');
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ السيرفر يعمل:', data.status);
+            } else {
+                console.warn('⚠️ مشكلة في اتصال السيرفر');
+            }
+        } catch (error) {
+            console.error('❌ فشل الاتصال بالسيرفر:', error);
+        }
     }
 
     // تحميل معلومات المستخدم
@@ -35,6 +51,21 @@ class ClainAIChat {
             console.log('جلسة ضيف:', error);
             this.setupGuestSession();
         }
+    }
+
+    // فحص حالة المستخدم
+    async checkUserStatus() {
+        try {
+            const response = await fetch('/api/user/status');
+            if (response.ok) {
+                const data = await response.json();
+                console.log('📊 حالة المستخدم:', data.status);
+                return data.status;
+            }
+        } catch (error) {
+            console.log('❌ فشل في فحص حالة المستخدم:', error);
+        }
+        return { is_logged_in: false };
     }
 
     // إعداد جلسة ضيف
@@ -70,7 +101,7 @@ class ClainAIChat {
 
             if (result.success) {
                 this.currentSession.hasUploadedFile = true;
-                this.showNotification('✅ تم رفع الملف بنجاح! يمكنك الآن السؤال عنه', 'success');
+                this.showNotification(' ✅ تم رفع الملف بنجاح! يمكنك الآن السؤال عنه', 'success');
                 return result;
             } else {
                 throw new Error(result.error || 'فشل في رفع الملف');
@@ -94,8 +125,8 @@ class ClainAIChat {
             .then(result => {
                 this.addMessageToUI('assistant',
                     `✅ **تم رفع الملف بنجاح!**\n\n` +
-                    `📄 **اسم الملف:** ${result.filename}\n` +
-                    `📊 **الحجم:** ${result.size} حرف\n\n` +
+                    `📄 **اسم الملف:** ${file.name}\n` +
+                    `📊 **الحجم:** ${file.size} bytes\n\n` +
                     `💡 **يمكنك الآن السؤال عن محتوى الملف!**\n` +
                     `جرب:\n` +
                     `• "ما هي النقاط الرئيسية؟"\n` +
@@ -122,14 +153,14 @@ class ClainAIChat {
         const messageLower = message.toLowerCase();
         return newsKeywords.some(keyword => messageLower.includes(keyword));
     }
-    
+
     // دالة جديدة للكشف عن طلب البحث العام
     isGeneralSearchRequest(message) {
         const searchKeywords = ['بحث', 'ابحث', 'من هو', 'متى', 'كم عدد', 'من فاز', 'آخر', 'جديد', 'ما هي أسعار', 'search', 'latest', 'who is', 'حدث', 'احدث', 'ماهو سعر', 'سعر', 'جديد'];
         const messageLower = message.toLowerCase();
-        
+
         // استخدم البحث إذا كان يحتوي على كلمات بحث، ولكنه ليس طلب أخبار صريح أو سؤال عن ملف
-        return searchKeywords.some(keyword => messageLower.includes(keyword)) && 
+        return searchKeywords.some(keyword => messageLower.includes(keyword)) &&
                !this.isNewsRequest(message) &&
                !this.isFileQuestion(message);
     }
@@ -239,7 +270,7 @@ class ClainAIChat {
                 },
                 body: JSON.stringify({
                     message: message,
-                    use_search: this.isGeneralSearchRequest(message) 
+                    use_search: this.isGeneralSearchRequest(message)
                 })
             });
 
@@ -253,12 +284,16 @@ class ClainAIChat {
             // إخفاء مؤشر الكتابة
             this.hideTypingIndicator();
 
-            // إضافة رد المساعد
-            this.addMessageToUI('assistant', data.reply);
+            if (data.success) {
+                // إضافة رد المساعد
+                this.addMessageToUI('assistant', data.reply);
 
-            // إذا كان هناك معلومات عن النموذج المستخدم
-            if (data.thinking) {
-                this.addMessageToUI('thinking', data.thinking);
+                // إذا كان هناك معلومات عن النموذج المستخدم
+                if (data.thinking) {
+                    this.addMessageToUI('thinking', `🤔 ${data.thinking}`);
+                }
+            } else {
+                throw new Error(data.error || 'حدث خطأ غير معروف');
             }
 
         } catch (error) {
@@ -296,7 +331,7 @@ class ClainAIChat {
         switch(role) {
             case 'user':
                 bubbleContent = `
-                    <div class="message-bubble">
+                    <div class="message-bubble user-bubble">
                         ${this.formatContent(content)}
                     </div>
                     <div class="message-time">${currentTime}</div>
@@ -305,7 +340,7 @@ class ClainAIChat {
 
             case 'assistant':
                 bubbleContent = `
-                    <div class="message-bubble">
+                    <div class="message-bubble assistant-bubble">
                         ${this.formatContent(content)}
                     </div>
                     <div class="message-time">${currentTime}</div>
@@ -314,8 +349,8 @@ class ClainAIChat {
 
             case 'thinking':
                 bubbleContent = `
-                    <div class="message-bubble thinking-message">
-                        ${this.formatContent(content)}
+                    <div class="message-bubble thinking-bubble">
+                        🤔 ${this.formatContent(content)}
                     </div>
                     <div class="message-time">${currentTime}</div>
                 `;
@@ -323,8 +358,8 @@ class ClainAIChat {
 
             case 'error':
                 bubbleContent = `
-                    <div class="message-bubble error-message">
-                        ${this.formatContent(content)}
+                    <div class="message-bubble error-bubble">
+                        ❌ ${this.formatContent(content)}
                     </div>
                     <div class="message-time">${currentTime}</div>
                 `;
@@ -373,16 +408,13 @@ class ClainAIChat {
                 await navigator.clipboard.writeText(textToCopy);
 
                 // إظهار مؤشر النسخ
-                const copyIndicator = document.createElement('div');
-                copyIndicator.className = 'copy-indicator';
-                copyIndicator.textContent = 'تم النسخ!';
-                this.appendChild(copyIndicator);
+                const originalBackground = this.style.background;
+                this.style.background = 'var(--success-color)';
+                this.style.transition = 'background 0.3s ease';
 
                 setTimeout(() => {
-                    if (copyIndicator.parentElement === this) {
-                        this.removeChild(copyIndicator);
-                    }
-                }, 2000);
+                    this.style.background = originalBackground;
+                }, 1000);
 
             } catch (err) {
                 console.error('فشل في نسخ النص: ', err);
@@ -400,7 +432,7 @@ class ClainAIChat {
         typingElement.className = 'message assistant-message';
         typingElement.innerHTML = `
             <div class="typing-indicator">
-                <span>يكتب</span>
+                <span>ClainAI يكتب</span>
                 <div class="typing-dots">
                     <div class="typing-dot"></div>
                     <div class="typing-dot"></div>
@@ -587,6 +619,9 @@ class ClainAIChat {
     setupEventListeners() {
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
+        const fileInput = document.getElementById('fileInput');
+        const clearButton = document.getElementById('clearButton');
+        const logoutButton = document.getElementById('logoutButton');
 
         if (messageInput) {
             messageInput.addEventListener('keypress', (e) => this.handleKeyPress(e));
@@ -598,6 +633,18 @@ class ClainAIChat {
 
         if (sendButton) {
             sendButton.addEventListener('click', () => this.sendMessage());
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+        }
+
+        if (clearButton) {
+            clearButton.addEventListener('click', () => this.clearChat());
+        }
+
+        if (logoutButton) {
+            logoutButton.addEventListener('click', () => this.logout());
         }
     }
 }
