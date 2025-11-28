@@ -122,6 +122,17 @@ class ClainAIChat {
         const messageLower = message.toLowerCase();
         return newsKeywords.some(keyword => messageLower.includes(keyword));
     }
+    
+    // دالة جديدة للكشف عن طلب البحث العام
+    isGeneralSearchRequest(message) {
+        const searchKeywords = ['بحث', 'ابحث', 'من هو', 'متى', 'كم عدد', 'من فاز', 'آخر', 'جديد', 'ما هي أسعار', 'search', 'latest', 'who is', 'حدث', 'احدث', 'ماهو سعر', 'سعر', 'جديد'];
+        const messageLower = message.toLowerCase();
+        
+        // استخدم البحث إذا كان يحتوي على كلمات بحث، ولكنه ليس طلب أخبار صريح أو سؤال عن ملف
+        return searchKeywords.some(keyword => messageLower.includes(keyword)) && 
+               !this.isNewsRequest(message) &&
+               !this.isFileQuestion(message);
+    }
 
     // دالة جلب الأخبار
     async getNews(query = 'أخبار اليوم') {
@@ -191,13 +202,6 @@ class ClainAIChat {
             return;
         }
 
-        // التحقق إذا كان سؤال عن ملف
-        if (this.isFileQuestion(message)) {
-            await this.sendFileQuestion(message);
-            messageInput.value = '';
-            return;
-        }
-
         // التحقق إذا كان طلب أخبار
         if (this.isNewsRequest(message)) {
             await this.getNews(message);
@@ -235,7 +239,7 @@ class ClainAIChat {
                 },
                 body: JSON.stringify({
                     message: message,
-                    use_search: this.isNewsRequest(message)
+                    use_search: this.isGeneralSearchRequest(message) 
                 })
             });
 
@@ -445,7 +449,7 @@ class ClainAIChat {
                     // احتفظ بالرسالة الترحيبية فقط إذا لم توجد محادثات سابقة
                     const welcomeMessage = chatContainer.innerHTML;
                     chatContainer.innerHTML = '';
-                    
+
                     history.messages.forEach(msg => {
                         this.addMessageToUI(msg.role, msg.content);
                     });
