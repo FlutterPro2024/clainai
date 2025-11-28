@@ -16,7 +16,6 @@ class ClainAIChat {
         await this.loadUserInfo();
         await this.loadChatHistory();
         this.setupEventListeners();
-        this.addFileUploadButton();
         this.showWelcomeMessage();
         console.log('✅ تم تهيئة ClainAI بنجاح!');
     }
@@ -50,13 +49,9 @@ class ClainAIChat {
 
     // تحديث واجهة معلومات المستخدم
     updateUIUserInfo(user) {
-        const userInfoElement = document.getElementById('userInfo');
-        if (userInfoElement) {
-            userInfoElement.innerHTML = `
-                <strong>👤 ${user.name}</strong>
-                <span class="role-badge">${user.role}</span>
-                ${user.role === 'developer' ? '👑' : ''}
-            `;
+        const userBadge = document.getElementById('userBadge');
+        if (userBadge) {
+            userBadge.innerHTML = `👤 ${user.name}`;
         }
     }
 
@@ -65,14 +60,14 @@ class ClainAIChat {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            
+
             const response = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData
             });
-            
+
             const result = await response.json();
-            
+
             if (result.success) {
                 this.currentSession.hasUploadedFile = true;
                 this.showNotification('✅ تم رفع الملف بنجاح! يمكنك الآن السؤال عنه', 'success');
@@ -87,42 +82,17 @@ class ClainAIChat {
         }
     }
 
-    // دالة السؤال عن الملف
-    async askAboutFile(question) {
-        try {
-            const response = await fetch('/api/ask-about-file', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ question: question })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                return result;
-            } else {
-                throw new Error(result.error || 'فشل في الحصول على إجابة');
-            }
-        } catch (error) {
-            console.error('❌ خطأ في السؤال عن الملف:', error);
-            this.showNotification(`❌ خطأ في السؤال عن الملف: ${error.message}`, 'error');
-            throw error;
-        }
-    }
-
     // معالجة رفع الملف من الواجهة
     handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
-        
+
         // عرض رسالة تحميل
         this.addMessageToUI('assistant', `📁 جاري تحليل الملف: **${file.name}**...`);
-        
+
         this.uploadFile(file)
             .then(result => {
-                this.addMessageToUI('assistant', 
+                this.addMessageToUI('assistant',
                     `✅ **تم رفع الملف بنجاح!**\n\n` +
                     `📄 **اسم الملف:** ${result.filename}\n` +
                     `📊 **الحجم:** ${result.size} حرف\n\n` +
@@ -138,32 +108,71 @@ class ClainAIChat {
             });
     }
 
-    // إرسال سؤال عن الملف
-    async sendFileQuestion(question) {
-        if (!question.trim()) return;
-        
-        // إضافة سؤال المستخدم
-        this.addMessageToUI('user', question);
-        
-        // عرض مؤشر الكتابة
-        this.showTypingIndicator();
-        
-        try {
-            const result = await this.askAboutFile(question);
-            this.hideTypingIndicator();
-            this.addMessageToUI('assistant', result.answer);
-        } catch (error) {
-            this.hideTypingIndicator();
-            this.addMessageToUI('error', `❌ خطأ في الحصول على إجابة: ${error.message}`);
-        }
-    }
-
     // الكشف إذا كان السؤال عن ملف
     isFileQuestion(message) {
         if (!this.currentSession.hasUploadedFile) return false;
-        
+
         const fileKeywords = ['الملف', 'محتوى', 'المستند', 'الوثيقة', 'الرفع', 'رفعت', 'المرفوع', 'الذي رفعته', 'الملف المرفوع'];
         return fileKeywords.some(keyword => message.includes(keyword));
+    }
+
+    // الكشف إذا كان طلب أخبار
+    isNewsRequest(message) {
+        const newsKeywords = ['أخبار', 'الأخبار', 'تحديثات', 'الأحداث', 'الجديد', 'آخر الأخبار', 'أحدث', 'اليوم', 'news', 'updates'];
+        const messageLower = message.toLowerCase();
+        return newsKeywords.some(keyword => messageLower.includes(keyword));
+    }
+
+    // دالة جلب الأخبار
+    async getNews(query = 'أخبار اليوم') {
+        try {
+            this.showTypingIndicator();
+
+            const response = await fetch('/api/news', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            });
+
+            const data = await response.json();
+
+            this.hideTypingIndicator();
+
+            if (data.success) {
+                this.addMessageToUI('assistant', data.summary);
+            } else {
+                this.addMessageToUI('error', '❌ لم أتمكن من جلب الأخبار حالياً');
+            }
+        } catch (error) {
+            this.hideTypingIndicator();
+            this.addMessageToUI('error', `❌ خطأ في جلب الأخبار: ${error.message}`);
+        }
+    }
+
+    // دالة جلب التاريخ
+    async getCurrentDate() {
+        try {
+            const response = await fetch('/api/date');
+            const data = await response.json();
+
+            if (data.success) {
+                const dateInfo = data.date_info;
+                const dateMessage = `
+                    **📅 التاريخ والوقت الحالي:**\n\n
+                    **التاريخ الميلادي:** ${dateInfo.gregorian.full_date}\n
+                    **اليوم:** ${dateInfo.gregorian.day_name}\n
+                    **التاريخ الهجري:** ${dateInfo.hijri.date} (${dateInfo.hijri.month_name})\n
+                    **السنة الهجرية:** ${dateInfo.hijri.year}\n
+                    **المنطقة الزمنية:** ${dateInfo.timezone}
+                `;
+                this.addMessageToUI('assistant', dateMessage);
+            }
+        } catch (error) {
+            console.error('Error fetching date:', error);
+            this.addMessageToUI('error', '❌ لم أتمكن من جلب التاريخ حالياً');
+        }
     }
 
     // إرسال رسالة
@@ -189,6 +198,20 @@ class ClainAIChat {
             return;
         }
 
+        // التحقق إذا كان طلب أخبار
+        if (this.isNewsRequest(message)) {
+            await this.getNews(message);
+            messageInput.value = '';
+            return;
+        }
+
+        // التحقق إذا كان طلب تاريخ
+        if (message.includes('التاريخ') || message.includes('الوقت') || message.includes('تاريخ') || message.includes('time') || message.includes('date')) {
+            await this.getCurrentDate();
+            messageInput.value = '';
+            return;
+        }
+
         // تعطيل الواجهة أثناء التحميل
         this.currentSession.isLoading = true;
         this.currentSession.typing = true;
@@ -210,7 +233,10 @@ class ClainAIChat {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message: message })
+                body: JSON.stringify({
+                    message: message,
+                    use_search: this.isNewsRequest(message)
+                })
             });
 
             if (!response.ok) {
@@ -226,8 +252,8 @@ class ClainAIChat {
             // إضافة رد المساعد
             this.addMessageToUI('assistant', data.reply);
 
-            // إذا كان مطوراً، عرض عملية التفكير
-            if (this.currentSession.user?.role === 'developer' && data.thinking) {
+            // إذا كان هناك معلومات عن النموذج المستخدم
+            if (data.thinking) {
                 this.addMessageToUI('thinking', data.thinking);
             }
 
@@ -255,58 +281,59 @@ class ClainAIChat {
 
         const messageElement = document.createElement('div');
         messageElement.className = `message ${role}-message`;
-        messageElement.setAttribute('role', 'listitem');
+
+        const currentTime = new Date().toLocaleTimeString('ar-EG', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
 
         // تنسيق مختلف لكل دور
+        let bubbleContent = '';
         switch(role) {
             case 'user':
-                messageElement.innerHTML = `
-                    <div class="message-header">
-                        <strong>👤 أنت</strong>
-                        <span class="message-time">${this.getCurrentTime()}</span>
+                bubbleContent = `
+                    <div class="message-bubble">
+                        ${this.formatContent(content)}
                     </div>
-                    <div class="message-content">${this.formatContent(content)}</div>
+                    <div class="message-time">${currentTime}</div>
                 `;
                 break;
 
             case 'assistant':
-                messageElement.innerHTML = `
-                    <div class="message-header">
-                        <strong>🤖 ClainAI</strong>
-                        <span class="message-time">${this.getCurrentTime()}</span>
+                bubbleContent = `
+                    <div class="message-bubble">
+                        ${this.formatContent(content)}
                     </div>
-                    <div class="message-content">${this.formatContent(content)}</div>
+                    <div class="message-time">${currentTime}</div>
                 `;
                 break;
 
             case 'thinking':
-                messageElement.innerHTML = `
-                    <div class="thinking-message">
-                        <div class="message-header">
-                            <strong>🧠 عملية التفكير</strong>
-                            <span class="message-time">${this.getCurrentTime()}</span>
-                        </div>
-                        <div class="message-content">${this.formatContent(content)}</div>
+                bubbleContent = `
+                    <div class="message-bubble thinking-message">
+                        ${this.formatContent(content)}
                     </div>
+                    <div class="message-time">${currentTime}</div>
                 `;
                 break;
 
             case 'error':
-                messageElement.innerHTML = `
-                    <div class="error-message">
-                        <div class="message-header">
-                            <strong>⚠️ خطأ</strong>
-                            <span class="message-time">${this.getCurrentTime()}</span>
-                        </div>
-                        <div class="message-content">${this.formatContent(content)}</div>
+                bubbleContent = `
+                    <div class="message-bubble error-message">
+                        ${this.formatContent(content)}
                     </div>
+                    <div class="message-time">${currentTime}</div>
                 `;
                 break;
         }
 
+        messageElement.innerHTML = bubbleContent;
         chatContainer.appendChild(messageElement);
 
-        // Scroll to bottom
+        // إضافة ميزة النسخ
+        this.addCopyFeature(messageElement.querySelector('.message-bubble'));
+
+        // التمرير للأسفل
         this.scrollToBottom();
 
         // حفظ في السجل
@@ -325,16 +352,37 @@ class ClainAIChat {
             .replace(/\n/g, '<br>')
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            .replace(/~~(.*?)~~/g, '<del>$1</del>')
-            .replace(/_(.*?)_/g, '<u>$1</u>');
+            .replace(/`(.*?)`/g, '<code>$1</code>');
     }
 
-    // الحصول على الوقت الحالي
-    getCurrentTime() {
-        return new Date().toLocaleTimeString('ar-EG', {
-            hour: '2-digit',
-            minute: '2-digit'
+    // ميزة نسخ الرسائل
+    addCopyFeature(element) {
+        if (!element) return;
+
+        element.style.cursor = 'pointer';
+        element.title = 'انقر للنسخ';
+
+        element.addEventListener('click', async function() {
+            const textToCopy = this.textContent || this.innerText;
+
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+
+                // إظهار مؤشر النسخ
+                const copyIndicator = document.createElement('div');
+                copyIndicator.className = 'copy-indicator';
+                copyIndicator.textContent = 'تم النسخ!';
+                this.appendChild(copyIndicator);
+
+                setTimeout(() => {
+                    if (copyIndicator.parentElement === this) {
+                        this.removeChild(copyIndicator);
+                    }
+                }, 2000);
+
+            } catch (err) {
+                console.error('فشل في نسخ النص: ', err);
+            }
         });
     }
 
@@ -347,16 +395,12 @@ class ClainAIChat {
         typingElement.id = 'typingIndicator';
         typingElement.className = 'message assistant-message';
         typingElement.innerHTML = `
-            <div class="message-header">
-                <strong>🤖 ClainAI</strong>
-                <span class="message-time">${this.getCurrentTime()}</span>
-            </div>
-            <div class="thinking-indicator">
-                <div class="thinking-dots">
-                    <span>يكتب</span>
-                    <span class="dot">.</span>
-                    <span class="dot">.</span>
-                    <span class="dot">.</span>
+            <div class="typing-indicator">
+                <span>يكتب</span>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
                 </div>
             </div>
         `;
@@ -397,9 +441,12 @@ class ClainAIChat {
                 const history = await response.json();
                 const chatContainer = document.getElementById('chatContainer');
 
-                if (chatContainer && history.length > 0) {
+                if (chatContainer && history.messages && history.messages.length > 0) {
+                    // احتفظ بالرسالة الترحيبية فقط إذا لم توجد محادثات سابقة
+                    const welcomeMessage = chatContainer.innerHTML;
                     chatContainer.innerHTML = '';
-                    history.forEach(msg => {
+                    
+                    history.messages.forEach(msg => {
                         this.addMessageToUI(msg.role, msg.content);
                     });
                 }
@@ -412,25 +459,24 @@ class ClainAIChat {
     // عرض رسالة ترحيب
     showWelcomeMessage() {
         const chatContainer = document.getElementById('chatContainer');
-        if (chatContainer && chatContainer.children.length === 0) {
-            setTimeout(() => {
-                this.addMessageToUI('assistant',
-                    '🎉 **مرحباً بك في ClainAI!** 🌟\n\n' +
-                    'مساعدك الذكي العربي المتكامل الذي يجيب على جميع أسئلتك بدقة واحترافية.\n\n' +
-                    '**💫 يمكنني مساعدتك في:**\n' +
-                    '• الإجابة على أسئلتك العلمية  🧪\n' +
-                    '• شرح المفاهيم التقنية 💻\n' +
-                    '• تقديم معلومات ثقافية 🌍\n' +
-                    '• المساعدة في البرمجة والتطوير 🔧\n' +
-                    '• تحليل الملفات النصية 📄\n\n' +
-                    '**📁 يمكنك رفع ملف نصي ثم السؤال عنه!**\n\n' +
-                    '**🎯 جرب هذه الأسئلة:**\n' +
-                    '• "ما هو الذكاء الاصطناعي?"\n' +
-                    '• "اشرح الحوسبة السحابية"\n' +
-                    '• "كيف أتعلم البرمجة?"\n\n' +
-                    'اسألني أي شيء! 😊'
-                );
-            }, 500);
+        if (chatContainer && this.currentSession.messages.length === 0) {
+            this.addMessageToUI('assistant',
+                '🎉 **مرحباً بك في ClainAI!** 🌟\n\n' +
+                'مساعدك الذكي العربي المتكامل الذي يجيب على جميع أسئلتك بدقة واحترافية.\n\n' +
+                '**💫 يمكنني مساعدتك في:**\n' +
+                '• الإجابة على أسئلتك العلمية 🧪\n' +
+                '• شرح المفاهيم التقنية 💻\n' +
+                '• تقديم معلومات ثقافية 🌍\n' +
+                '• المساعدة في البرمجة والتطوير 🔧\n' +
+                '• تحليل الملفات النصية 📄\n' +
+                '• أخبار وتحديثات 📰\n\n' +
+                '**🎯 جرب هذه الأسئلة:**\n' +
+                '• "ما هو الذكاء الاصطناعي?"\n' +
+                '• "ما هي أخبار اليوم؟"\n' +
+                '• "ما التاريخ اليوم؟"\n' +
+                '• "كيف أتعلم البرمجة?"\n\n' +
+                'اسألني أي شيء! 😊'
+            );
         }
     }
 
@@ -485,7 +531,7 @@ class ClainAIChat {
             <button onclick="this.parentElement.remove()">✕</button>
         `;
 
-        // إضافة الأنماط
+        // إضافة الأنماط إذا لم تكن موجودة
         if (!document.querySelector('#notification-styles')) {
             const styles = document.createElement('style');
             styles.id = 'notification-styles';
@@ -505,9 +551,9 @@ class ClainAIChat {
                     gap: 10px;
                     max-width: 300px;
                 }
-                .notification-success { background: var(--success); }
-                .notification-error { background: var(--error); }
-                .notification-info { background: var(--primary-color); }
+                .notification-success { background: #48bb78; }
+                .notification-error { background: #f56565; }
+                .notification-info { background: #667eea; }
                 .notification button {
                     background: none;
                     border: none;
@@ -533,43 +579,6 @@ class ClainAIChat {
         }, 3000);
     }
 
-    // إضافة زر رفع الملف للواجهة
-    addFileUploadButton() {
-        const chatInputContainer = document.querySelector('.chat-input-container');
-        if (!chatInputContainer) return;
-        
-        // التحقق إذا كان الزر موجود مسبقاً
-        if (document.getElementById('fileUploadBtn')) return;
-        
-        const fileHtml = `
-            <div class="file-upload-section">
-                <input type="file" id="fileInput" style="display: none;" accept=".txt,.pdf,.doc,.docx,.py,.js,.html,.css,.json,.md">
-                <button type="button" id="fileUploadBtn" class="file-upload-btn" title="رفع ملف">
-                    📁 رفع ملف
-                </button>
-                <span id="fileName" class="file-name"></span>
-            </div>
-        `;
-        
-        // إضافة زر رفع الملف قبل حقل الإدخال
-        chatInputContainer.insertAdjacentHTML('afterbegin', fileHtml);
-        
-        // إضافة مستمع حدث للزر
-        document.getElementById('fileUploadBtn').addEventListener('click', () => {
-            document.getElementById('fileInput').click();
-        });
-        
-        // تحديث اسم الملف عند الاختيار
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            const fileName = document.getElementById('fileName');
-            if (e.target.files.length > 0) {
-                fileName.textContent = e.target.files[0].name;
-            } else {
-                fileName.textContent = '';
-            }
-        });
-    }
-
     // إعداد مستمعي الأحداث
     setupEventListeners() {
         const messageInput = document.getElementById('messageInput');
@@ -586,25 +595,6 @@ class ClainAIChat {
         if (sendButton) {
             sendButton.addEventListener('click', () => this.sendMessage());
         }
-
-        // إضافة مستمع لرفع الملفات
-        const fileInput = document.getElementById('fileInput');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
-        }
-
-        // تحديث تلقائي للوقت
-        setInterval(() => {
-            this.updateMessageTimes();
-        }, 60000); // كل دقيقة
-    }
-
-    // تحديث أوقات الرسائل
-    updateMessageTimes() {
-        const messageHeaders = document.querySelectorAll('.message-header .message-time');
-        messageHeaders.forEach(header => {
-            // يمكن إضافة منطق لتحديث الوقت إذا لزم الأمر
-        });
     }
 }
 
@@ -621,7 +611,7 @@ window.addEventListener('error', function(event) {
 // دعم PWA
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/static/sw.js')
+        navigator.serviceWorker.register('/service-worker.js')
             .then(function(registration) {
                 console.log('ServiceWorker registered: ', registration.scope);
             })
@@ -630,10 +620,3 @@ if ('serviceWorker' in navigator) {
             });
     });
 }
-
-// تصدير الدوال للاستخدام العالمي
-window.sendMessage = function() { window.clainai?.sendMessage(); }
-window.clearChat = function() { window.clainai?.clearChat(); }
-window.logout = function() { window.clainai?.logout(); }
-window.uploadFile = function(file) { return window.clainai?.uploadFile(file); }
-window.askAboutFile = function(question) { return window.clainai?.askAboutFile(question); }

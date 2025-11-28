@@ -1,2 +1,13 @@
 .env
 .vercel
+.env
+*.db
+*.log
+__pycache__/
+uploads/
+.env
+*.db
+*.log
+__pycache__/
+uploads/
+.env.backup

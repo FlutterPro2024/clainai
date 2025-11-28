@@ -9,6 +9,10 @@ import secrets
 from dotenv import load_dotenv
 import PyPDF2
 import docx
+import json
+import base64
+from io import BytesIO
+import threading
 
 # Load environment
 load_dotenv()
@@ -26,15 +30,17 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
+# نماذج الذكاء الاصطناعي المتقدمة - API Keys
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+
 # استخدام قاعدة بيانات في الذاكرة لـ Vercel
 DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
-# Auto-detect environment and set base URL
+# استخدام دومين ثابت
 def get_base_url():
-    if 'VERCEL' in os.environ:
-        return 'https://clainai-deploy-qd5arwtrf-flutterpro2024s-projects.vercel.app'
-    else:
-        return 'http://localhost:5000'
+    return 'https://clainai.vercel.app'
 
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
@@ -57,13 +63,248 @@ print("🚀 ClainAI - المساعد الذكي الإبداعي المتقدم!
 print("=" * 60)
 print(f"📍 Base URL: {BASE_URL}")
 print(f"🔑 OpenRouter Key: {OPENROUTER_API_KEY[:20] if OPENROUTER_API_KEY else 'None'}...")
+print(f"🔑 Google AI Key: {GOOGLE_API_KEY[:20] if GOOGLE_API_KEY else 'None'}...")
+print(f"🔑 OpenAI Key: {OPENAI_API_KEY[:20] if OPENAI_API_KEY else 'None'}...")
+print(f"🔑 Claude Key: {CLAUDE_API_KEY[:20] if CLAUDE_API_KEY else 'None'}...")
 print(f"🔍 Serper Search: {'✅' if SERPER_API_KEY else '❌'}")
 print(f"🔐 GitHub OAuth: {'✅' if GITHUB_CLIENT_ID else '❌'}")
 print(f"🔐 Google OAuth: {'✅' if GOOGLE_CLIENT_ID else '❌'}")
 print(f"📄 PDF Support: ✅")
 print(f"📝 Word Support: ✅")
 print(f"🖼️ Image Analysis: ✅")
+print(f"🔍 Web Search: ✅")
+print(f"📰 News Search: ✅")
+print(f"🤖 Multi-AI Models: ✅")
 print(f"👑 Developer: محمد عبد القادر السراج - mohammedu3615@gmail.com")
+
+# =============================================================================
+# نماذج الذكاء الاصطناعي المتقدمة - الإضافة الجديدة
+# =============================================================================
+
+# نماذج الذكاء الاصطناعي المتاحة
+AI_MODELS = {
+    "google": {
+        "name": "Google Gemini Pro",
+        "endpoint": "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent",
+        "key": GOOGLE_API_KEY,
+        "enabled": bool(GOOGLE_API_KEY)
+    },
+    "openai": {
+        "name": "OpenAI GPT-4",
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "key": OPENAI_API_KEY,
+        "enabled": bool(OPENAI_API_KEY)
+    },
+    "claude": {
+        "name": "Claude 3 Sonnet",
+        "endpoint": "https://api.anthropic.com/v1/messages",
+        "key": CLAUDE_API_KEY,
+        "enabled": bool(CLAUDE_API_KEY)
+    },
+    "llama": {
+        "name": "Llama 3 70B",
+        "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+        "key": OPENROUTER_API_KEY,
+        "enabled": bool(OPENROUTER_API_KEY)
+    }
+}
+
+def get_ai_response(message, model_type="google"):
+    """
+    الحصول على رد ذكي من النماذج المتاحة
+    """
+    try:
+        model = AI_MODELS.get(model_type, AI_MODELS["google"])
+        
+        if not model["enabled"]:
+            raise Exception(f"النموذج غير مفعل - {model['name']}")
+        
+        if model_type == "google":
+            return get_google_response(message, model)
+        elif model_type == "openai":
+            return get_openai_response(message, model)
+        elif model_type == "claude":
+            return get_claude_response(message, model)
+        elif model_type == "llama":
+            return get_llama_response(message, model)
+        else:
+            return get_fallback_response(message)
+            
+    except Exception as e:
+        print(f"❌ خطأ في النموذج {model_type}: {str(e)}")
+        raise e
+
+def get_google_response(message, model):
+    """نموذج جوجل جيميني"""
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": f"أنت ClainAI - مساعد ذكي عربي متخصص. أجب على السؤال التالي بطريقة مفيدة ودقيقة ومفصلة باللغة العربية:\n\n{message}"
+            }]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "topK": 40,
+            "topP": 0.95,
+            "maxOutputTokens": 2048,
+        },
+        "safetySettings": [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+            }
+        ]
+    }
+    
+    url = f"{model['endpoint']}?key={model['key']}"
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
+    
+    if response.status_code == 200:
+        result = response.json()
+        if 'candidates' in result and result['candidates']:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            raise Exception("لا يوجد رد من النموذج")
+    else:
+        raise Exception(f"خطأ في API: {response.status_code} - {response.text}")
+
+def get_openai_response(message, model):
+    """نموذج OpenAI"""
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {model['key']}"
+    }
+    
+    payload = {
+        "model": "gpt-4",
+        "messages": [
+            {
+                "role": "system",
+                "content": "أنت ClainAI - مساعد ذكي عربي متخصص. قدم إجابات دقيقة ومفيدة ومفصلة باللغة العربية. كن إبداعياً ومفيداً في ردودك."
+            },
+            {
+                "role": "user",
+                "content": message
+            }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 2000
+    }
+    
+    response = requests.post(model["endpoint"], headers=headers, json=payload, timeout=30)
+    if response.status_code == 200:
+        result = response.json()
+        return result["choices"][0]["message"]["content"]
+    else:
+        raise Exception(f"خطأ في API: {response.status_code} - {response.text}")
+
+def get_claude_response(message, model):
+    """نموذج Claude"""
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": model['key'],
+        "anthropic-version": "2023-06-01"
+    }
+    
+    payload = {
+        "model": "claude-3-sonnet-20240229",
+        "max_tokens": 2000,
+        "temperature": 0.7,
+        "messages": [
+            {
+                "role": "user",
+                "content": f"أنت ClainAI - مساعد ذكي عربي متخصص. أجب على السؤال التالي بطريقة مفيدة ودقيقة ومفصلة باللغة العربية:\n\n{message}"
+            }
+        ]
+    }
+    
+    response = requests.post(model["endpoint"], headers=headers, json=payload, timeout=30)
+    if response.status_code == 200:
+        result = response.json()
+        return result["content"][0]["text"]
+    else:
+        raise Exception(f"خطأ في API: {response.status_code} - {response.text}")
+
+def get_llama_response(message, model):
+    """نموذج Llama عبر OpenRouter"""
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {model['key']}",
+        "HTTP-Referer": f"{BASE_URL}",
+        "X-Title": "ClainAI Chat"
+    }
+    
+    payload = {
+        "model": "meta-llama/llama-3-70b-instruct",
+        "messages": [
+            {
+                "role": "system",
+                "content": "أنت ClainAI - مساعد ذكي عربي متخصص. قدم إجابات دقيقة ومفيدة ومفصلة باللغة العربية. كن إبداعياً ومفيداً في ردودك."
+            },
+            {
+                "role": "user",
+                "content": message
+            }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 2000
+    }
+    
+    response = requests.post(model["endpoint"], headers=headers, json=payload, timeout=30)
+    if response.status_code == 200:
+        result = response.json()
+        return result["choices"][0]["message"]["content"]
+    else:
+        raise Exception(f"خطأ في API: {response.status_code} - {response.text}")
+
+def get_fallback_response(message):
+    """رد احتياطي عندما تفشل جميع النماذج"""
+    fallback_responses = {
+        "من هو مطورك": "أنا ClainAI، تم تطويري بواسطة المهندس السوداني محمد عبد القادر السراج - خريج جامعة العلوم وتقانة المعلومات (IT) وخريج تكنولوجيا المعلومات والاتصالات (ICT). أسعى دائماً لتقديم أفضل تجربة للمستخدمين العرب من خلال دمج أحدث تقنيات الذكاء الاصطناعي. 📧 البريد: mohammedu3615@gmail.com",
+        
+        "ماهو الذكاء الاصطناعي": "الذكاء الاصطناعي (Artificial Intelligence) هو مجال من مجالات علوم الكمبيوتر يهتم بتطوير أنظمة قادرة على أداء مهام تتطلب ذكاءً بشرياً مثل:\n\n• 🤖 **التعلم** (Learning): قدرة النظام على تحسين أدائه من خلال التجربة\n• 💭 **التفكير** (Reasoning): القدرة على استنتاج النتائج المنطقية\n• 🔍 **حل المشكلات** (Problem Solving): إيجاد حلول للتحديات المعقدة\n• 📊 **الإدراك** (Perception): فهم وتحليل البيانات من البيئة المحيطة\n• 💬 **فهم اللغة** (Language Understanding): معالجة وفهم اللغات البشرية\n\nيشمل الذكاء الاصطناعي مجالات فرعية مثل التعلم الآلي، الشبكات العصبية، الرؤية الحاسوبية، ومعالجة اللغة الطبيعية.",
+        
+        "ما هي المجالات": "مجالات الذكاء الاصطناعي تشمل:\n\n🎯 **المجالات الرئيسية:**\n• التعلم الآلي (Machine Learning)\n• الشبكات العصبية (Neural Networks)\n• معالجة اللغة الطبيعية (NLP)\n• الرؤية الحاسوبية (Computer Vision)\n• الروبوتات (Robotics)\n• الأنظمة الخبيرة (Expert Systems)\n• التعلم العميق (Deep Learning)\n\n💼 **التطبيقات العملية:**\n• المساعدات الذكية (مثل ClainAI)\n• السيارات ذاتية القيادة\n• التشخيص الطبي\n• التوصيات الذكية\n• الترجمة الآلية\n• الأمن السيبراني",
+        
+        "عرف الحوسبة السحابية": "الحوسبة السحابية (Cloud Computing) هي نموذج لتقديم خدمات حاسوبية عبر الإنترنت تشمل:\n\n☁️ **الخدمات الأساسية:**\n• **الخوادم** (Servers): قوة معالجة مرنة\n• **التخزين** (Storage): مساحة تخزين غير محدودة\n• **قواعد البيانات** (Databases): أنواع متعددة من قواعد البيانات\n• **الشبكات** (Networking): بنية تحتية شبكية متطورة\n• **البرمجيات** (Software): تطبيقات جاهزة للاستخدام\n\n🎯 **نماذج الخدمة:**\n• **IaaS** (البنية التحتية كخدمة)\n• **PaaS** (المنصة كخدمة)  \n• **SaaS** (البرمجيات كخدمة)\n\n💫 **المزايا:**\n• توفير التكاليف\n• المرونة والتوسع\n• الأمان المتقدم\n• الابتكار السريع\n• تحديثات تلقائية"
+    }
+    
+    # البحث عن رد مناسب
+    for key, response in fallback_responses.items():
+        if key in message:
+            return response
+    
+    # رد عام إذا لم يتم العثور على تطابق
+    return "شكراً لسؤالك! 🤖 أنا ClainAI - مساعد ذكي عربي. حالياً، أحتاج إلى تكوين مفاتيح API للنماذج المتقدمة (جوجل Gemini، OpenAI، Claude) لتقديم إجابات أكثر دقة وإبداعية. يمكنك إضافة هذه المفاتيح في إعدادات التطبيق لتفعيل الإجابات الذكية المتقدمة! 💡"
+
+def get_smart_response(message):
+    """
+    الحصول على رد ذكي من أفضل نموذج متاح
+    """
+    enabled_models = [model_type for model_type, model in AI_MODELS.items() if model["enabled"]]
+    
+    if not enabled_models:
+        return get_fallback_response(message), "fallback"
+    
+    # محاولة النماذج بالترتيب
+    for model_type in enabled_models:
+        try:
+            response = get_ai_response(message, model_type)
+            return response, model_type
+        except Exception as e:
+            print(f"❌ فشل النموذج {model_type}: {str(e)}")
+            continue
+    
+    # إذا فشلت جميع النماذج
+    return get_fallback_response(message), "fallback"
+
+# =============================================================================
+# نهاية الإضافة الجديدة - باقي الكود الأصلي يتبع
+# =============================================================================
 
 # دالة الاتصال بقاعدة البيانات
 def get_db_connection():
@@ -97,7 +338,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
+
     # جدول المحادثات
     conn.execute('''
         CREATE TABLE IF NOT EXISTS conversations (
@@ -111,7 +352,7 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
-    
+
     # جدول الملفات المرفوعة
     conn.execute('''
         CREATE TABLE IF NOT EXISTS uploaded_files (
@@ -123,7 +364,7 @@ def init_db():
             uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
+
     # جدول عمليات البحث
     conn.execute('''
         CREATE TABLE IF NOT EXISTS searches (
@@ -135,7 +376,7 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
-    
+
     conn.commit()
     conn.close()
     print("✅ تم إنشاء قاعدة البيانات بنجاح")
@@ -171,10 +412,11 @@ def health_check():
     try:
         init_db()
         return jsonify({
-            "status": "healthy", 
+            "status": "healthy",
             "database": "connected",
             "message": "✅ ClainAI is working perfectly!",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "ai_models": {model: config["enabled"] for model, config in AI_MODELS.items()}
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -233,76 +475,6 @@ def google_auth():
     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=email profile&access_type=offline"
     return redirect(google_auth_url)
 
-# باقي ال routes الأساسية
-@app.route("/api/chat", methods=["POST"])
-def chat():
-    try:
-        if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
-        data = request.json
-        message = data.get('message', '').strip()
-        if not message:
-            return jsonify({'error': 'الرسالة فارغة'}), 400
-        user_id = session['user_id']
-        
-        # التحقق إذا كان السؤال عن المطور
-        developer_keywords = ['مطور', 'مبرمج', 'صاحب', 'خالق', 'من صنع', 'who made you', 'developer', 'creator', 'who created you', 'برمجة', 'صنع', 'مين']
-        message_lower = message.lower()
-        if any(keyword in message_lower for keyword in developer_keywords):
-            developer_info = "✅ تم تطويري بواسطة المهندس السوداني محمد عبد القادر السراج - خريج جامعة العلوم وتقانة المعلومات (IT) وخريج تكنولوجيا المعلومات والاتصالات (ICT) - البريد: mohammedu3615@gmail.com"
-            conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
-            conn = get_db_connection()
-            conn.execute(
-                'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
-                (conversation_id, user_id, message, developer_info, "developer_info")
-            )
-            conn.commit()
-            conn.close()
-            return jsonify({'success': True, 'reply': developer_info, 'model_used': 'developer_info'})
-
-        # استخدام OpenRouter للأسئلة العادية
-        models = ["meta-llama/llama-3-70b-instruct:nitro", "openai/gpt-3.5-turbo", "google/gemini-2.0-flash-exp:free"]
-        response = None
-        used_model = ""
-        for model in models:
-            try:
-                response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                        "HTTP-Referer": f"{BASE_URL}",
-                        "X-Title": "ClainAI Chat"
-                    },
-                    json={
-                        "model": model,
-                        "messages": [{"role": "user", "content": f"أنت مساعد ذكي عربي. أجب بطريقة مفيدة وإبداعية.\n\nالسؤال: {message}"}],
-                        "temperature": 0.7,
-                        "max_tokens": 2000
-                    },
-                    timeout=30
-                )
-                if response.status_code == 200:
-                    used_model = model
-                    break
-            except:
-                continue
-
-        if not response or response.status_code != 200:
-            return jsonify({'error': 'جميع النماذج غير متاحة حالياً. يرجى المحاولة لاحقاً.'}), 503
-
-        result = response.json()
-        reply = result['choices'][0]['message']['content']
-        conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
-        conn = get_db_connection()
-        conn.execute(
-            'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
-            (conversation_id, user_id, message, reply, used_model)
-        )
-        conn.commit()
-        conn.close()
-        return jsonify({'success': True, 'reply': reply, 'model_used': used_model})
-    except Exception as e:
-        return jsonify({'error': f'حدث خطأ: {str(e)}'}), 500
 # Google OAuth Callback Route
 @app.route('/api/auth/google/callback')
 def google_callback():
@@ -310,7 +482,7 @@ def google_callback():
         code = request.args.get('code')
         if not code:
             return redirect('/login?error=missing_code')
-        
+
         # Exchange code for tokens
         token_url = "https://oauth2.googleapis.com/token"
         token_data = {
@@ -320,52 +492,52 @@ def google_callback():
             'grant_type': 'authorization_code',
             'redirect_uri': GOOGLE_REDIRECT_URI
         }
-        
+
         token_response = requests.post(token_url, data=token_data)
         token_json = token_response.json()
-        
+
         if 'error' in token_json:
             return redirect('/login?error=token_failed')
-        
+
         access_token = token_json['access_token']
-        
+
         # Get user info
         user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
         headers = {'Authorization': f'Bearer {access_token}'}
         user_response = requests.get(user_info_url, headers=headers)
         user_info = user_response.json()
-        
+
         # Create or get user
         init_db()
         user_id = f"google_{user_info['id']}"
         conn = get_db_connection()
-        
+
         conn.execute(
             'INSERT OR REPLACE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
             (user_id, user_info.get('name', 'User'), user_info.get('email', ''), 'user')
         )
         conn.commit()
         conn.close()
-        
+
         # Set session
         session['user_id'] = user_id
         session['user_name'] = user_info.get('name', 'User')
         session['user_role'] = 'user'
-        
+
         return redirect('/')
-        
+
     except Exception as e:
         print(f"❌ Google OAuth error: {str(e)}")
         return redirect('/login?error=auth_failed')
 
-# GitHub OAuth Callback Route  
+# GitHub OAuth Callback Route
 @app.route('/api/auth/github/callback')
 def github_callback():
     try:
         code = request.args.get('code')
         if not code:
             return redirect('/login?error=missing_code')
-        
+
         # Exchange code for tokens
         token_url = "https://github.com/login/oauth/access_token"
         token_data = {
@@ -376,49 +548,561 @@ def github_callback():
         headers = {'Accept': 'application/json'}
         token_response = requests.post(token_url, data=token_data, headers=headers)
         token_json = token_response.json()
-        
+
         if 'error' in token_json:
             return redirect('/login?error=token_failed')
-        
+
         access_token = token_json['access_token']
-        
+
         # Get user info
         user_info_url = "https://api.github.com/user"
         headers = {'Authorization': f'token {access_token}'}
         user_response = requests.get(user_info_url, headers=headers)
         user_info = user_response.json()
-        
+
         # Get email (if available)
         email_url = "https://api.github.com/user/emails"
         email_response = requests.get(email_url, headers=headers)
         emails = email_response.json()
         primary_email = next((email['email'] for email in emails if email['primary']), '')
-        
+
         # Create or get user
         init_db()
         user_id = f"github_{user_info['id']}"
         conn = get_db_connection()
-        
+
         conn.execute(
             'INSERT OR REPLACE INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
             (user_id, user_info.get('name', user_info.get('login', 'User')), primary_email, 'user')
         )
         conn.commit()
         conn.close()
-        
+
         # Set session
         session['user_id'] = user_id
         session['user_name'] = user_info.get('name', user_info.get('login', 'User'))
         session['user_role'] = 'user'
-        
+
         return redirect('/')
-        
+
     except Exception as e:
         print(f"❌ GitHub OAuth error: {str(e)}")
         return redirect('/login?error=auth_failed')
+
+# Route لمسح المحادثات
+@app.route("/api/clear", methods=["POST"])
+def clear_conversations():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        user_id = session['user_id']
+        conn = get_db_connection()
+        conn.execute('DELETE FROM conversations WHERE user_id = ?', (user_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'تم مسح المحادثة بنجاح'})
+    except Exception as e:
+        return jsonify({'error': f'حدث خطأ: {str(e)}'}), 500
+
+# Route لرفع الملفات
+@app.route("/api/upload", methods=["POST"])
+def upload_file():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'لم يتم اختيار ملف'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'لم يتم اختيار ملف'}), 400
+
+        # حفظ الملف مؤقتاً ومعالجته
+        file_id = hashlib.md5(f"{session['user_id']}_{file.filename}_{datetime.now().timestamp()}".encode()).hexdigest()
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        file_content = ""
+
+        try:
+            if file_extension == '.pdf':
+                # معالجة PDF
+                pdf_reader = PyPDF2.PdfReader(file)
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text() + "\n"
+                file_content = f"📄 ملف PDF: {file.filename}\n\nالمحتوى:\n{text[:5000]}..." if len(text) > 5000 else text
+
+            elif file_extension in ['.docx', '.doc']:
+                # معالجة Word
+                doc = docx.Document(file)
+                text = ""
+                for paragraph in doc.paragraphs:
+                    text += paragraph.text + "\n"
+                file_content = f"📝 ملف Word: {file.filename}\n\nالمحتوى:\n{text[:5000]}..." if len(text) > 5000 else text
+
+            elif file_extension in ['.jpg', '.jpeg', '.png', '.gif']:
+                # معالجة الصور (وصف أساسي)
+                file_content = f"🖼️ صورة: {file.filename}\nالحجم: {len(file.read())} bytes\nتم رفع الصورة بنجاح، يمكنك سؤال ClainAI عن محتواها."
+
+            elif file_extension == '.txt':
+                # معالجة نصي
+                text = file.read().decode('utf-8')
+                file_content = f"📄 ملف نصي: {file.filename}\n\nالمحتوى:\n{text[:5000]}..." if len(text) > 5000 else text
+
+            else:
+                file_content = f"📎 ملف: {file.filename}\nالنوع: {file_extension}\nالحجم: {len(file.read())} bytes"
+
+        except Exception as processing_error:
+            file_content = f"📎 ملف: {file.filename}\nالنوع: {file_extension}\nالحجم: {len(file.read())} bytes\nملاحظة: تعذر تحليل المحتوى بالكامل"
+
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT INTO uploaded_files (id, user_id, filename, content, file_type) VALUES (?, ?, ?, ?, ?)',
+            (file_id, session['user_id'], file.filename, file_content, file.content_type)
+        )
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'تم رفع الملف {file.filename} بنجاح',
+            'file_id': file_id,
+            'content_preview': file_content[:200] + "..." if len(file_content) > 200 else file_content
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'حدث خطأ في رفع الملف: {str(e)}'}), 500
+
+# Route للبحث على الإنترنت
+@app.route("/api/search", methods=["POST"])
+def search_web():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        data = request.json
+        query = data.get('query', '').strip()
+        if not query:
+            return jsonify({'error': 'استعلام البحث فارغ'}), 400
+
+        if not SERPER_API_KEY:
+            return jsonify({'error': 'خدمة البحث غير متاحة حالياً'}), 503
+
+        # استخدام Serper API للبحث
+        search_url = "https://google.serper.dev/search"
+        headers = {
+            'X-API-KEY': SERPER_API_KEY,
+            'Content-Type': 'application/json'
+        }
+        payload = {'q': query}
+
+        response = requests.post(search_url, headers=headers, json=payload)
+        if response.status_code != 200:
+            return jsonify({'error': 'فشل في البحث'}), 500
+
+        search_results = response.json()
+
+        # حفظ نتائج البحث
+        search_id = hashlib.md5(f"{session['user_id']}_{query}_{datetime.now().timestamp()}".encode()).hexdigest()
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT INTO searches (id, user_id, query, results) VALUES (?, ?, ?, ?)',
+            (search_id, session['user_id'], query, json.dumps(search_results))
+        )
+        conn.commit()
+        conn.close()
+
+        # تنسيق النتائج للعرض
+        formatted_results = []
+        if 'organic' in search_results:
+            for result in search_results['organic'][:5]:
+                formatted_results.append({
+                    'title': result.get('title', ''),
+                    'link': result.get('link', ''),
+                    'snippet': result.get('snippet', '')
+                })
+
+        return jsonify({
+            'success': True,
+            'query': query,
+            'results': formatted_results,
+            'total_results': len(formatted_results)
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'حدث خطأ في البحث: {str(e)}'}), 500
+
+# Route للأخبار والتحديثات
+@app.route("/api/news", methods=["POST"])
+def get_news():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        data = request.json
+        query = data.get('query', 'أخبار اليوم')
+
+        # استخدام Serper API للأخبار
+        if SERPER_API_KEY:
+            news_url = "https://google.serper.dev/news"
+            headers = {
+                'X-API-KEY': SERPER_API_KEY,
+                'Content-Type': 'application/json'
+            }
+            payload = {'q': query, 'num': 5}
+
+            response = requests.post(news_url, headers=headers, json=payload)
+
+            if response.status_code == 200:
+                news_data = response.json()
+
+                # تنسيق النتائج
+                news_items = []
+                if 'news' in news_data:
+                    for item in news_data['news'][:5]:
+                        news_items.append({
+                            'title': item.get('title', ''),
+                            'link': item.get('link', ''),
+                            'source': item.get('source', ''),
+                            'date': item.get('date', ''),
+                            'snippet': item.get('snippet', '')
+                        })
+
+                # استخدام النماذج الذكية لتلخيص الأخبار
+                try:
+                    news_context = "\nأهم الأخبار:\n"
+                    for i, news in enumerate(news_items, 1):
+                        news_context += f"{i}. {news['title']}\n   المصدر: {news['source']}\n   التفاصيل: {news['snippet']}\n\n"
+
+                    prompt = f"""أنت ClainAI - مساعد أخبار عربي. قم بتلخيص أهم الأخبار لليوم {datetime.now().strftime('%Y-%m-%d')}.
+
+{news_context}
+
+قدم تلخيصاً واضحاً ومفيداً باللغة العربية يركز على النقاط الرئيسية بطريقة إبداعية ومفصلة."""
+
+                    news_summary, model_used = get_smart_response(prompt)
+                    
+                except:
+                    news_summary = "📰 **أهم أخبار اليوم:**\n\n"
+                    for i, news in enumerate(news_items, 1):
+                        news_summary += f"**{i}. {news['title']}**\n"
+                        news_summary += f"📰 المصدر: {news['source']}\n"
+                        news_summary += f"📝 {news['snippet']}\n\n"
+
+                return jsonify({
+                    'success': True,
+                    'query': query,
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'summary': news_summary,
+                    'articles': news_items,
+                    'model_used': model_used
+                })
+
+        return jsonify({
+            'success': True,
+            'message': 'خدمة الأخبار غير متاحة حالياً',
+            'date': datetime.now().strftime('%Y-%m-%d')
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'حدث خطأ في جلب الأخبار: {str(e)}'}), 500
+
+# Route للحصول على التاريخ والوقت
+@app.route("/api/date", methods=["GET"])
+def get_current_date():
+    try:
+        now = datetime.now()
+        hijri_date = get_hijri_date()
+
+        date_info = {
+            'gregorian': {
+                'date': now.strftime('%Y-%m-%d'),
+                'time': now.strftime('%H:%M:%S'),
+                'day_name': now.strftime('%A'),
+                'full_date': now.strftime('%Y/%m/%d %H:%M:%S')
+            },
+            'hijri': hijri_date,
+            'timezone': 'Africa/Cairo'
+        }
+
+        return jsonify({
+            'success': True,
+            'date_info': date_info
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# دالة مساعدة للحصول على التاريخ الهجري
+def get_hijri_date():
+    try:
+        today = datetime.now()
+        hijri_months = ['محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة',
+                       'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة']
+
+        hijri_year = 1446
+        hijri_month = hijri_months[(today.month - 1) % 12]
+        hijri_day = today.day
+
+        return {
+            'date': f'{hijri_year}-{(today.month):02d}-{today.day:02d}',
+            'month_name': hijri_month,
+            'year': hijri_year
+        }
+    except:
+        return {
+            'date': 'غير متوفر',
+            'month_name': 'غير متوفر',
+            'year': 'غير متوفر'
+        }
+
+# Route للحصول على معلومات المستخدم
+@app.route("/api/user", methods=["GET"])
+def get_user():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        user_id = session['user_id']
+        conn = get_db_connection()
+        user = conn.execute(
+            'SELECT id, name, email, role FROM users WHERE id = ?',
+            (user_id,)
+        ).fetchone()
+        conn.close()
+
+        if user:
+            return jsonify({
+                'id': user['id'],
+                'name': user['name'],
+                'email': user['email'],
+                'role': user['role']
+            })
+        else:
+            return jsonify({'error': 'المستخدم غير موجود'}), 404
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Route للحصول على تاريخ المحادثات
+@app.route("/api/history", methods=["GET"])
+def get_history():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        user_id = session['user_id']
+        conn = get_db_connection()
+        conversations = conn.execute(
+            'SELECT message, reply, created_at FROM conversations WHERE user_id = ? ORDER BY created_at ASC',
+            (user_id,)
+        ).fetchall()
+        conn.close()
+
+        messages = []
+        for conv in conversations:
+            messages.append({
+                'role': 'user',
+                'content': conv['message'],
+                'timestamp': conv['created_at']
+            })
+            messages.append({
+                'role': 'assistant',
+                'content': conv['reply'],
+                'timestamp': conv['created_at']
+            })
+
+        return jsonify({'messages': messages})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Route لحفظ الموقع
+@app.route("/api/location", methods=["POST"])
+def save_location():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        data = request.json
+        lat = data.get('lat')
+        lng = data.get('lng')
+
+        if not lat or not lng:
+            return jsonify({'error': 'إحداثيات الموقع مطلوبة'}), 400
+
+        # حفظ الموقع في قاعدة البيانات
+        location_id = hashlib.md5(f"{session['user_id']}_{lat}_{lng}_{datetime.now().timestamp()}".encode()).hexdigest()
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT INTO uploaded_files (id, user_id, filename, content, file_type) VALUES (?, ?, ?, ?, ?)',
+            (location_id, session['user_id'], f"location_{lat}_{lng}", f"الموقع: {lat}, {lng}", "location")
+        )
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'تم حفظ الموقع'})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Route لتسجيل الخروج - يدعم GET و POST
+@app.route("/api/logout", methods=["POST", "GET"])
+def logout():
+    session.clear()
+    if request.method == 'POST':
+        return jsonify({'success': True, 'message': 'تم تسجيل الخروج بنجاح'})
+    else:
+        return redirect('/login')
+
+# =============================================================================
+# Route المحادثة الرئيسية المحدثة - باستخدام النماذج الذكية
+# =============================================================================
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            
+        data = request.json
+        message = data.get('message', '').strip()
+        use_search = data.get('use_search', False)
+        
+        if not message:
+            return jsonify({'error': 'الرسالة فارغة'}), 400
+            
+        user_id = session['user_id']
+        print(f"📩 رسالة مستلمة من {user_id}: {message}")
+
+        # التحقق إذا كان السؤال عن المطور
+        developer_keywords = ['مطور', 'مبرمج', 'صاحب', 'خالق', 'من صنع', 'who made you', 'developer', 'creator', 'who created you', 'برمجة', 'صنع', 'مين', 'البريد', 'ايميل', 'email']
+        message_lower = message.lower()
+        if any(keyword in message_lower for keyword in developer_keywords):
+            developer_info = "🤖 **معلومات المطور:**\n\n✅ تم تطويري بواسطة **المهندس السوداني محمد عبد القادر السراج**\n🎓 **المؤهلات:**\n• خريج جامعة العلوم وتقانة المعلومات (IT)\n• خريج تكنولوجيا المعلومات والاتصالات (ICT)\n📧 **البريد الإلكتروني:** mohammedu3615@gmail.com\n\nأعمل دائماً على تطوير وتحسين أدائي لخدمة المستخدمين العرب بأفضل صورة! 💪"
+            
+            conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
+            conn = get_db_connection()
+            conn.execute(
+                'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
+                (conversation_id, user_id, message, developer_info, "developer_info")
+            )
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True, 
+                'reply': developer_info, 
+                'model_used': 'developer_info',
+                'thinking': 'معلومات المطور'
+            })
+
+        # التحقق إذا كان السؤال عن الاسم
+        name_keywords = ['ما اسمك', 'اسمك', 'شو اسمك', 'عرف بنفسك', 'من انت', 'who are you', 'what is your name', 'شنا', 'شنا اسمك']
+        if any(keyword in message_lower for keyword in name_keywords):
+            name_reply = "🤖 **أنا ClainAI - المساعد الذكي العربي المتطور!**\n\n✨ **ما أقدمه لك:**\n• محادثات ذكية مثل ChatGPT\n• تحليل الملفات (PDF, Word, الصور)\n• بحث ذكي على الإنترنت\n• إجابات إبداعية ومفيدة\n• دعم متعدد النماذج الذكية\n\n🚀 **تم تطويري بواسطة المهندس محمد عبد القادر السراج** لخدمة المستخدمين العرب بكل احترافية وإبداع!"
+            
+            conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
+            conn = get_db_connection()
+            conn.execute(
+                'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
+                (conversation_id, user_id, message, name_reply, "name_info")
+            )
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True, 
+                'reply': name_reply, 
+                'model_used': 'name_info',
+                'thinking': 'معلومات الهوية'
+            })
+
+        # البحث على الإنترنت إذا طلب المستخدم
+        search_context = ""
+        if use_search and SERPER_API_KEY:
+            try:
+                search_url = "https://google.serper.dev/search"
+                headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+                payload = {'q': message}
+                search_response = requests.post(search_url, headers=headers, json=payload, timeout=15)
+
+                if search_response.status_code == 200:
+                    search_data = search_response.json()
+                    if 'organic' in search_data and search_data['organic']:
+                        top_results = search_data['organic'][:3]
+                        search_context = "\n\n🔍 **معلومات من البحث على الإنترنت:**\n"
+                        for i, result in enumerate(top_results, 1):
+                            search_context += f"{i}. **{result.get('title', '')}**: {result.get('snippet', '')}\n"
+            except Exception as search_error:
+                print(f"🔍 خطأ في البحث: {search_error}")
+
+        # استخدام النماذج الذكية المتقدمة للحصول على رد
+        print("🔄 جاري الحصول على رد ذكي من النماذج المتاحة...")
+        ai_reply, model_used = get_smart_response(message + search_context)
+        
+        # إضافة علامة إذا تم استخدام البحث
+        if search_context:
+            ai_reply += "\n\n🔍 *تم دمج معلومات من البحث على الإنترنت*"
+
+        # حفظ المحادثة في قاعدة البيانات
+        conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
+            (conversation_id, user_id, message, ai_reply, model_used)
+        )
+        conn.commit()
+        conn.close()
+
+        print(f"✅ تم إرسال الرد باستخدام {model_used}")
+
+        return jsonify({
+            'success': True,
+            'reply': ai_reply,
+            'model_used': model_used,
+            'model_name': AI_MODELS.get(model_used, {}).get('name', 'النظام الذكي'),
+            'thinking': f"تم استخدام {AI_MODELS.get(model_used, {}).get('name', 'النظام الذكي')} للإجابة على سؤالك",
+            'used_search': bool(search_context)
+        })
+
+    except Exception as e:
+        print(f"❌ خطأ في المحادثة: {str(e)}")
+        return jsonify({
+            'error': f'حدث خطأ: {str(e)}',
+            'reply': 'عذراً، حدث خطأ في المعالجة. يرجى المحاولة مرة أخرى.'
+        }), 500
+
+# =============================================================================
+# Route جديد للحصول على معلومات النماذج
+# =============================================================================
+
+@app.route("/api/models", methods=["GET"])
+def get_models_info():
+    """الحصول على معلومات عن النماذج المتاحة"""
+    try:
+        models_info = {}
+        for model_type, model in AI_MODELS.items():
+            models_info[model_type] = {
+                'name': model['name'],
+                'enabled': model['enabled'],
+                'has_key': bool(model['key'])
+            }
+        
+        return jsonify({
+            'success': True,
+            'models': models_info,
+            'total_models': len(models_info),
+            'enabled_models': sum(1 for model in models_info.values() if model['enabled'])
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     with app.app_context():
         init_db()
         print(f"🌐 التطبيق جاهز على: {BASE_URL}")
+        print(f"🤖 النماذج المفعلة: {[model['name'] for model in AI_MODELS.values() if model['enabled']]}")
     app.run(host='0.0.0.0', port=5000, debug=False)
