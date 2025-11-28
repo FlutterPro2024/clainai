@@ -38,9 +38,21 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 # استخدام قاعدة بيانات في الذاكرة لـ Vercel
 DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
-# استخدام دومين ثابت
+# =============================================================================
+# 🔧 التعديل: استخدام دومين ديناميكي لـ Vercel
+# =============================================================================
 def get_base_url():
-    return 'https://clainai.vercel.app'
+    """الحصول على الـ base URL ديناميكياً من بيئة Vercel"""
+    vercel_url = os.environ.get('VERCEL_URL')
+    if vercel_url:
+        return f"https://{vercel_url}"
+    
+    vercel_git_repo_slug = os.environ.get('VERCEL_GIT_REPO_SLUG')
+    if vercel_git_repo_slug:
+        return f"https://{vercel_git_repo_slug}.vercel.app"
+    
+    # Fallback إلى اسم افتراضي
+    return "https://clainai-deploy.vercel.app"
 
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
@@ -75,10 +87,11 @@ print(f"🖼️ Image Analysis: ✅")
 print(f"🔍 Web Search: ✅")
 print(f"📰 News Search: ✅")
 print(f"🤖 Multi-AI Models: ✅")
+print(f"🌐 Dynamic Domain: ✅")
 print(f"👑 Developer: محمد عبد القادر السراج - mohammedu3615@gmail.com")
 
 # =============================================================================
-# نماذج الذكاء الاصطناعي المتقدمة - الإضافة الجديدة
+# نماذج الذكاء الاصطناعي المتقدمة
 # =============================================================================
 
 # نماذج الذكاء الاصطناعي المتاحة
@@ -416,6 +429,7 @@ def health_check():
             "database": "connected",
             "message": "✅ ClainAI is working perfectly!",
             "timestamp": datetime.now().isoformat(),
+            "base_url": BASE_URL,
             "ai_models": {model: config["enabled"] for model, config in AI_MODELS.items()}
         })
     except Exception as e:
@@ -467,11 +481,15 @@ def guest_login():
 
 @app.route('/api/auth/github')
 def github_auth():
+    if not GITHUB_CLIENT_ID:
+        return redirect('/login?error=github_not_configured')
     github_auth_url = f"https://github.com/oauth/authorize?client_id={GITHUB_CLIENT_ID}&redirect_uri={GITHUB_REDIRECT_URI}&scope=user:email"
     return redirect(github_auth_url)
 
 @app.route('/api/auth/google')
 def google_auth():
+    if not GOOGLE_CLIENT_ID:
+        return redirect('/login?error=google_not_configured')
     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=email profile&access_type=offline"
     return redirect(google_auth_url)
 
@@ -479,6 +497,9 @@ def google_auth():
 @app.route('/api/auth/google/callback')
 def google_callback():
     try:
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            return redirect('/login?error=google_not_configured')
+
         code = request.args.get('code')
         if not code:
             return redirect('/login?error=missing_code')
@@ -534,6 +555,9 @@ def google_callback():
 @app.route('/api/auth/github/callback')
 def github_callback():
     try:
+        if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
+            return redirect('/login?error=github_not_configured')
+
         code = request.args.get('code')
         if not code:
             return redirect('/login?error=missing_code')
