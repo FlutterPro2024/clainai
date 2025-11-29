@@ -39,10 +39,15 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
 # =============================================================================
-# 🔧 التعديل: استخدام دومين ديناميكي لـ Vercel
+# 🔧 التعديل: استخدام Environment Variables مباشرة
 # =============================================================================
 def get_base_url():
-    """الحصول على الـ base URL ديناميكياً من بيئة Vercel"""
+    """الحصول على الـ base URL من Environment Variables أو ديناميكياً"""
+    # الأولوية لـ Environment Variables
+    env_base_url = os.environ.get('BASE_URL')
+    if env_base_url:
+        return env_base_url
+    
     vercel_url = os.environ.get('VERCEL_URL')
     if vercel_url:
         return f"https://{vercel_url}"
@@ -54,9 +59,23 @@ def get_base_url():
     # Fallback إلى الدومين الثابت
     return "https://clainai-dep.vercel.app"
 
+def get_github_redirect_uri():
+    """الحصول على GitHub Redirect URI من Environment Variables"""
+    env_redirect = os.environ.get('GITHUB_REDIRECT_URI')
+    if env_redirect:
+        return env_redirect
+    return f"{get_base_url()}/api/auth/github/callback"
+
+def get_google_redirect_uri():
+    """الحصول على Google Redirect URI من Environment Variables"""
+    env_redirect = os.environ.get('GOOGLE_REDIRECT_URI')
+    if env_redirect:
+        return env_redirect
+    return f"{get_base_url()}/api/auth/google/callback"
+
 BASE_URL = get_base_url()
-GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
-GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
+GITHUB_REDIRECT_URI = get_github_redirect_uri()
+GOOGLE_REDIRECT_URI = get_google_redirect_uri()
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = SECRET_KEY or "fallback-secret-key-for-development"
@@ -74,6 +93,8 @@ print("=" * 60)
 print("🚀 ClainAI - المساعد الذكي الإبداعي المتقدم!")
 print("=" * 60)
 print(f"📍 Base URL: {BASE_URL}")
+print(f"📍 GitHub Redirect: {GITHUB_REDIRECT_URI}")
+print(f"📍 Google Redirect: {GOOGLE_REDIRECT_URI}")
 print(f"🔑 OpenRouter Key: {OPENROUTER_API_KEY[:20] if OPENROUTER_API_KEY else 'None'}...")
 print(f"🔑 Google AI Key: {GOOGLE_API_KEY[:20] if GOOGLE_API_KEY else 'None'}...")
 print(f"🔑 OpenAI Key: {OPENAI_API_KEY[:20] if OPENAI_API_KEY else 'None'}...")
@@ -416,6 +437,8 @@ def app_status():
         'timestamp': datetime.now().isoformat(),
         'database': 'connected',
         'base_url': BASE_URL,
+        'github_redirect': GITHUB_REDIRECT_URI,
+        'google_redirect': GOOGLE_REDIRECT_URI,
         'ai_models': {
             model: config["enabled"]
             for model, config in AI_MODELS.items()
@@ -450,7 +473,9 @@ def user_status():
             'success': True,
             'status': user_info,
             'server_time': datetime.now().isoformat(),
-            'base_url': BASE_URL
+            'base_url': BASE_URL,
+            'github_redirect': GITHUB_REDIRECT_URI,
+            'google_redirect': GOOGLE_REDIRECT_URI
         })
 
     except Exception as e:
@@ -492,6 +517,8 @@ def health_check():
             "message": "✅ ClainAI is working perfectly!",
             "timestamp": datetime.now().isoformat(),
             "base_url": BASE_URL,
+            "github_redirect": GITHUB_REDIRECT_URI,
+            "google_redirect": GOOGLE_REDIRECT_URI,
             "ai_models": {model: config["enabled"] for model, config in AI_MODELS.items()}
         })
     except Exception as e:
@@ -1250,6 +1277,9 @@ def debug_info():
         "base_url": BASE_URL,
         "github_redirect": GITHUB_REDIRECT_URI,
         "google_redirect": GOOGLE_REDIRECT_URI,
+        "env_base_url": os.environ.get('BASE_URL'),
+        "env_github_redirect": os.environ.get('GITHUB_REDIRECT_URI'),
+        "env_google_redirect": os.environ.get('GOOGLE_REDIRECT_URI'),
         "session_keys": list(session.keys()) if 'user_id' in session else "no_session",
         "environment": {
             "github_oauth": bool(GITHUB_CLIENT_ID),
@@ -1259,9 +1289,21 @@ def debug_info():
         }
     })
 
+@app.route("/api/check-env")
+def check_env():
+    """فحص Environment Variables مباشرة"""
+    return jsonify({
+        "env_base_url": os.environ.get('BASE_URL'),
+        "env_github_redirect": os.environ.get('GITHUB_REDIRECT_URI'), 
+        "env_google_redirect": os.environ.get('GOOGLE_REDIRECT_URI'),
+        "env_nextauth_url": os.environ.get('NEXTAUTH_URL')
+    })
+
 if __name__ == "__main__":
     with app.app_context():
         init_db()
         print(f"🌐 التطبيق جاهز على: {BASE_URL}")
+        print(f"📍 GitHub Redirect: {GITHUB_REDIRECT_URI}")
+        print(f"📍 Google Redirect: {GOOGLE_REDIRECT_URI}")
         print(f"🤖 النماذج المفعلة: {[model['name'] for model in AI_MODELS.values() if model['enabled']]}")
     app.run(host='0.0.0.0', port=5000, debug=False)
