@@ -14,7 +14,7 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    def load_dotenv(): 
+    def load_dotenv():
         pass
     print("⚠️ dotenv not available, using environment variables directly")
 
@@ -30,7 +30,8 @@ except ImportError:
     docx = None
     print("⚠️ python-docx not available, Word processing disabled")
 
-# API Keys
+# API Keys - مع تشخيص مفصل
+print("🔍 جاري فحص API Keys...")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 SECRET_KEY = os.getenv("SECRET_KEY") or "fallback-secret-key-for-development"
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
@@ -48,20 +49,28 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
+# تشخيص حالة API Keys
+print(f"📋 حالة API Keys:")
+print(f"  - Google API: {'✅' if GOOGLE_API_KEY else '❌'} ({len(GOOGLE_API_KEY) if GOOGLE_API_KEY else 0} chars)")
+print(f"  - OpenAI API: {'✅' if OPENAI_API_KEY else '❌'} ({len(OPENAI_API_KEY) if OPENAI_API_KEY else 0} chars)")
+print(f"  - Claude API: {'✅' if CLAUDE_API_KEY else '❌'} ({len(CLAUDE_API_KEY) if CLAUDE_API_KEY else 0} chars)")
+print(f"  - OpenRouter: {'✅' if OPENROUTER_API_KEY else '❌'} ({len(OPENROUTER_API_KEY) if OPENROUTER_API_KEY else 0} chars)")
+print(f"  - Serper Search: {'✅' if SERPER_API_KEY else '❌'}")
+
 # استخدام قاعدة بيانات في الذاكرة لـ Vercel
 DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
 # =============================================================================
-# 🔧 نظام الوكيل الذكي (AI Agent)
+# 🔧 نظام الوكيل الذكي (AI Agent) - محسن
 # =============================================================================
 
 class AgentMemory:
     """نظام الذاكرة للوكيل الذكي"""
-    
+
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.conn = get_db_connection()
-    
+
     def save_preference(self, key: str, value: str) -> bool:
         """حفظ تفضيلات المستخدم"""
         try:
@@ -75,7 +84,7 @@ class AgentMemory:
         except Exception as e:
             print(f"❌ خطأ في حفظ الذاكرة: {e}")
             return False
-    
+
     def get_preference(self, key: str) -> str:
         """جلب تفضيلات المستخدم"""
         try:
@@ -90,11 +99,11 @@ class AgentMemory:
 
 class TaskManager:
     """مدير المهام للوكيل الذكي"""
-    
+
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.conn = get_db_connection()
-    
+
     def create_task(self, task_type: str, description: str, data: Dict = None) -> str:
         """إنشاء مهمة جديدة"""
         try:
@@ -108,7 +117,7 @@ class TaskManager:
         except Exception as e:
             print(f"❌ خطأ في إنشاء المهمة: {e}")
             return ""
-    
+
     def get_pending_tasks(self) -> List[Dict]:
         """جلب المهام المعلقة"""
         try:
@@ -120,7 +129,7 @@ class TaskManager:
         except Exception as e:
             print(f"❌ خطأ في جلب المهام: {e}")
             return []
-    
+
     def complete_task(self, task_id: str, result: str = "") -> bool:
         """إكمال المهمة"""
         try:
@@ -136,12 +145,12 @@ class TaskManager:
 
 class SmartAgent:
     """الوكيل الذكي الرئيسي"""
-    
+
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.memory = AgentMemory(user_id)
         self.tasks = TaskManager(user_id)
-    
+
     def analyze_intent(self, message: str) -> Dict[str, Any]:
         """تحليل نية المستخدم"""
         intents = {
@@ -150,20 +159,20 @@ class SmartAgent:
             "research_topic": ["ابحث", "اعرف", "معلومات", "دراسة", "بحث"],
             "automate_task": ["اتمتع", "شغل", "افعل", "نفذ", "اعمل"]
         }
-        
+
         message_lower = message.lower()
         detected_intents = []
-        
+
         for intent, keywords in intents.items():
             if any(keyword in message_lower for keyword in keywords):
                 detected_intents.append(intent)
-        
+
         return {
             "intents": detected_intents,
             "needs_agent": len(detected_intents) > 0,
             "is_instruction": any(word in message_lower for word in ["افعل", "نفذ", "اعمل", "اتمتع"])
         }
-    
+
     def create_tracking_task(self, topic: str, condition: str = "") -> str:
         """إنشاء مهمة متابعة"""
         return self.tasks.create_task(
@@ -171,7 +180,7 @@ class SmartAgent:
             f"متابعة {topic}",
             {"topic": topic, "condition": condition, "last_checked": datetime.now().isoformat()}
         )
-    
+
     def create_research_task(self, topic: str, depth: str = "basic") -> str:
         """إنشاء مهمة بحث"""
         return self.tasks.create_task(
@@ -182,7 +191,7 @@ class SmartAgent:
 
 class AgentAutomation:
     """نظام الأتمتة للوكيل"""
-    
+
     @staticmethod
     def get_current_price(topic: str) -> str:
         """الحصول على السعر الحالي (محاكاة)"""
@@ -190,13 +199,13 @@ class AgentAutomation:
             # محاكاة للحصول على سعر حقيقي
             prices = {
                 "الذهب": "💰 سعر الذهب اليوم: ~185 دولار للأونصة",
-                "الدولار": "💵 سعر الدولار: ~3.75 جنيه سوداني", 
+                "الدولار": "💵 سعر الدولار: ~3.75 جنيه سوداني",
                 "البترول": "🛢️ سعر البترول: ~80 دولار للبرميل",
                 "البيتكوين": "₿ سعر البيتكوين: ~45,000 دولار",
                 "الفضة": "🔗 سعر الفضة: ~22 دولار للأونصة",
                 "اليورو": "💶 سعر اليورو: ~4.15 جنيه سوداني"
             }
-            
+
             return prices.get(topic, f"🔍 جاري البحث عن سعر {topic}...")
         except Exception as e:
             return f"❌ تعذر الحصول على سعر {topic}"
@@ -227,7 +236,7 @@ def get_base_url():
     env_base_url = os.environ.get('BASE_URL')
     if env_base_url:
         return env_base_url
-    
+
     vercel_url = os.environ.get('VERCEL_URL')
     if vercel_url:
         return f"https://{vercel_url}"
@@ -251,7 +260,7 @@ app.config.update(
 )
 
 # =============================================================================
-# نماذج الذكاء الاصطناعي المتقدمة
+# نماذج الذكاء الاصطناعي المتقدمة - محسنة
 # =============================================================================
 
 # نماذج الذكاء الاصطناعي المتاحة
@@ -260,31 +269,81 @@ AI_MODELS = {
         "name": "Google Gemini Pro",
         "endpoint": "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent",
         "key": GOOGLE_API_KEY,
-        "enabled": bool(GOOGLE_API_KEY)
+        "enabled": bool(GOOGLE_API_KEY and len(GOOGLE_API_KEY) > 10)
     },
     "openai": {
         "name": "OpenAI GPT-4",
         "endpoint": "https://api.openai.com/v1/chat/completions",
         "key": OPENAI_API_KEY,
-        "enabled": bool(OPENAI_API_KEY)
+        "enabled": bool(OPENAI_API_KEY and len(OPENAI_API_KEY) > 10)
     },
     "claude": {
         "name": "Claude 3 Sonnet",
         "endpoint": "https://api.anthropic.com/v1/messages",
         "key": CLAUDE_API_KEY,
-        "enabled": bool(CLAUDE_API_KEY)
+        "enabled": bool(CLAUDE_API_KEY and len(CLAUDE_API_KEY) > 10)
     },
     "llama": {
         "name": "Llama 3 70B",
         "endpoint": "https://openrouter.ai/api/v1/chat/completions",
         "key": OPENROUTER_API_KEY,
-        "enabled": bool(OPENROUTER_API_KEY)
+        "enabled": bool(OPENROUTER_API_KEY and len(OPENROUTER_API_KEY) > 10)
     }
 }
+
+print("🤖 حالة النماذج الذكية:")
+for model, config in AI_MODELS.items():
+    status = "✅ مفعل" if config["enabled"] else "❌ معطل"
+    print(f"  - {config['name']}: {status}")
+
+def test_api_connection():
+    """اختبار اتصال APIs"""
+    print("\n🔧 جاري اختبار اتصال APIs...")
+    
+    # اختبار OpenRouter
+    if AI_MODELS["llama"]["enabled"]:
+        try:
+            print("🔄 اختبار اتصال OpenRouter...")
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "HTTP-Referer": f"{BASE_URL}",
+                "X-Title": "ClainAI Test"
+            }
+            payload = {
+                "model": "meta-llama/llama-3-70b-instruct",
+                "messages": [{"role": "user", "content": "Hello, test connection. Reply with 'SUCCESS' only."}],
+                "max_tokens": 10
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=10)
+            print(f"  OpenRouter: {'✅' if response.status_code == 200 else '❌'} ({response.status_code})")
+        except Exception as e:
+            print(f"  OpenRouter: ❌ ({str(e)})")
+    
+    # اختبار Google
+    if AI_MODELS["google"]["enabled"]:
+        try:
+            print("🔄 اختبار اتصال Google AI...")
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GOOGLE_API_KEY}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [{"parts": [{"text": "Test connection"}]}],
+                "generationConfig": {"maxOutputTokens": 10}
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=10)
+            print(f"  Google AI: {'✅' if response.status_code == 200 else '❌'} ({response.status_code})")
+        except Exception as e:
+            print(f"  Google AI: ❌ ({str(e)})")
+
+# تشغيل اختبار الاتصال عند البدء
+test_api_connection()
 
 def get_ai_response(message, model_type="google"):
     """الحصول على رد ذكي من النماذج المتاحة"""
     try:
+        print(f"🔄 محاولة النموذج: {model_type}")
+        
         if model_type == "google" and AI_MODELS["google"]["enabled"]:
             return get_google_response(message)
         elif model_type == "openai" and AI_MODELS["openai"]["enabled"]:
@@ -294,6 +353,7 @@ def get_ai_response(message, model_type="google"):
         elif model_type == "llama" and AI_MODELS["llama"]["enabled"]:
             return get_llama_response(message)
         else:
+            print(f"❌ النموذج {model_type} غير مفعل")
             return get_fallback_response(message)
     except Exception as e:
         print(f"❌ خطأ في النموذج {model_type}: {str(e)}")
@@ -302,9 +362,10 @@ def get_ai_response(message, model_type="google"):
 def get_google_response(message):
     """نموذج جوجل جيميني"""
     try:
+        print(f"🚀 جاري الاتصال بـ Google Gemini...")
         url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GOOGLE_API_KEY}"
         headers = {"Content-Type": "application/json"}
-        
+
         payload = {
             "contents": [{
                 "parts": [{
@@ -318,24 +379,34 @@ def get_google_response(message):
         }
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
+        print(f"📥 استجابة Google: {response.status_code}")
+        
         if response.status_code == 200:
             result = response.json()
             if 'candidates' in result and result['candidates']:
-                return result["candidates"][0]["content"]["parts"][0]["text"]
+                response_text = result["candidates"][0]["content"]["parts"][0]["text"]
+                print(f"✅ نجح Google Gemini: {response_text[:100]}...")
+                return response_text
+            else:
+                print(f"❌ لا توجد مرشحات في الاستجابة: {result}")
+        else:
+            print(f"❌ خطأ Google API: {response.status_code} - {response.text}")
+            
         return get_fallback_response(message)
     except Exception as e:
-        print(f"❌ خطأ في Google API: {str(e)}")
+        print(f"❌ استثناء في Google API: {str(e)}")
         return get_fallback_response(message)
 
 def get_openai_response(message):
     """نموذج OpenAI"""
     try:
+        print(f"🚀 جاري الاتصال بـ OpenAI...")
         url = "https://api.openai.com/v1/chat/completions"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {OPENAI_API_KEY}"
         }
-        
+
         payload = {
             "model": "gpt-3.5-turbo",
             "messages": [
@@ -353,24 +424,32 @@ def get_openai_response(message):
         }
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
+        print(f"📥 استجابة OpenAI: {response.status_code}")
+        
         if response.status_code == 200:
             result = response.json()
-            return result["choices"][0]["message"]["content"]
+            response_text = result["choices"][0]["message"]["content"]
+            print(f"✅ نجح OpenAI: {response_text[:100]}...")
+            return response_text
+        else:
+            print(f"❌ خطأ OpenAI API: {response.status_code} - {response.text}")
+            
         return get_fallback_response(message)
     except Exception as e:
-        print(f"❌ خطأ في OpenAI API: {str(e)}")
+        print(f"❌ استثناء في OpenAI API: {str(e)}")
         return get_fallback_response(message)
 
 def get_claude_response(message):
     """نموذج Claude"""
     try:
+        print(f"🚀 جاري الاتصال بـ Claude...")
         url = "https://api.anthropic.com/v1/messages"
         headers = {
             "Content-Type": "application/json",
             "x-api-key": CLAUDE_API_KEY,
             "anthropic-version": "2023-06-01"
         }
-        
+
         payload = {
             "model": "claude-3-sonnet-20240229",
             "max_tokens": 2000,
@@ -384,17 +463,25 @@ def get_claude_response(message):
         }
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
+        print(f"📥 استجابة Claude: {response.status_code}")
+        
         if response.status_code == 200:
             result = response.json()
-            return result["content"][0]["text"]
+            response_text = result["content"][0]["text"]
+            print(f"✅ نجح Claude: {response_text[:100]}...")
+            return response_text
+        else:
+            print(f"❌ خطأ Claude API: {response.status_code} - {response.text}")
+            
         return get_fallback_response(message)
     except Exception as e:
-        print(f"❌ خطأ في Claude API: {str(e)}")
+        print(f"❌ استثناء في Claude API: {str(e)}")
         return get_fallback_response(message)
 
 def get_llama_response(message):
     """نموذج Llama عبر OpenRouter"""
     try:
+        print(f"🚀 جاري الاتصال بـ OpenRouter (Llama)...")
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Content-Type": "application/json",
@@ -402,7 +489,7 @@ def get_llama_response(message):
             "HTTP-Referer": f"{BASE_URL}",
             "X-Title": "ClainAI Chat"
         }
-        
+
         payload = {
             "model": "meta-llama/llama-3-70b-instruct",
             "messages": [
@@ -420,18 +507,27 @@ def get_llama_response(message):
         }
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
+        print(f"📥 استجابة OpenRouter: {response.status_code}")
+        
         if response.status_code == 200:
             result = response.json()
-            return result["choices"][0]["message"]["content"]
+            response_text = result["choices"][0]["message"]["content"]
+            print(f"✅ نجح Llama: {response_text[:100]}...")
+            return response_text
+        else:
+            print(f"❌ خطأ OpenRouter API: {response.status_code} - {response.text}")
+            
         return get_fallback_response(message)
     except Exception as e:
-        print(f"❌ خطأ في Llama API: {str(e)}")
+        print(f"❌ استثناء في OpenRouter API: {str(e)}")
         return get_fallback_response(message)
 
 def get_fallback_response(message):
     """رد احتياطي عندما تفشل جميع النماذج"""
+    print("🔄 استخدام الرد الافتراضي...")
+    
     fallback_responses = {
-        "من هو مطورك": "أنا ClainAI، تم تطويري بواسطة المهندس السوداني محمد عبد القادر السراج - خريج جامعة العلوم وتقانة المعلومات (IT) وخريج تكنولوجيا المعلومات والاتصالات (ICT). أسعى دائماً لتقديم أفضل تجربة للمستخدمين العرب من خلال دمج أحدث تقنيات الذكاء الاصطناعي. 📧 البريد: mohammedu3615@gmail.com",
+        "من هو مطورك": "🤖 **معلومات المطور:**\n\n✅ تم تطويري بواسطة **المهندس السوداني محمد عبد القادر السراج**\n🎓 **المؤهلات:**\n• خريج جامعة العلوم وتقانة المعلومات (IT)\n• خريج تكنولوجيا المعلومات والاتصالات (ICT)\n📧 **البريد الإلكتروني:** mohammedu3615@gmail.com\n\nأعمل دائماً على تطوير وتحسين أدائي لخدمة المستخدمين العرب بأفضل صورة! 💪",
 
         "ماهو الذكاء الاصطناعي": "الذكاء الاصطناعي (Artificial Intelligence) هو مجال من مجالات علوم الكمبيوتر يهتم بتطوير أنظمة قادرة على أداء مهام تتطلب ذكاءً بشرياً مثل:\n\n• 🤖 **التعلم** (Learning): قدرة النظام على تحسين أدائه من خلال التجربة\n• 💭 **التفكير** (Reasoning): القدرة على استنتاج النتائج المنطقية\n• 🔍 **حل المشكلات** (Problem Solving): إيجاد حلول للتحديات المعقدة\n\nيشمل الذكاء الاصطناعي مجالات فرعية مثل التعلم الآلي، الشبكات العصبية، الرؤية الحاسوبية، ومعالجة اللغة الطبيعية.",
 
@@ -439,37 +535,81 @@ def get_fallback_response(message):
 
         "عرف الحوسبة السحابية": "الحوسبة السحابية (Cloud Computing) هي نموذج لتقديم خدمات حاسوبية عبر الإنترنت تشمل:\n\n☁️ **الخدمات الأساسية:**\n• **الخوادم** (Servers): قوة معالجة مرنة\n• **التخزين** (Storage): مساحة تخزين غير محدودة\n• **قواعد البيانات** (Databases): أنواع متعددة من قواعد البيانات\n\n🎯 **نماذج الخدمة:**\n• **IaaS** (البنية التحتية كخدمة)\n• **PaaS** (المنصة كخدمة)  \n• **SaaS** (البرمجيات كخدمة)\n\n💫 **المزايا:**\n• توفير التكاليف\n• المرونة والتوسع\n• الأمان المتقدم\n• الابتكار السريع",
 
-        "ما اسمك": "🤖 **أنا ClainAI - المساعد الذكي العربي المتطور!**\n\n✨ **ما أقدمه لك:**\n• محادثات ذكية متقدمة\n• تحليل الملفات (PDF, Word, الصور)\n• بحث ذكي على الإنترنت\n• إجابات إبداعية ومفيدة\n• دعم متعدد النماذج الذكية\n• نظام وكيل ذكي للمهام التلقائية\n\n🚀 **تم تطويري بواسطة المهندس محمد عبد القادر السراج** لخدمة المستخدمين العرب بكل احترافية وإبداع!"
+        "ما اسمك": "🤖 **أنا ClainAI - المساعد الذكي العربي المتطور!**\n\n✨ **ما أقدمه لك:**\n• محادثات ذكية متقدمة\n• تحليل الملفات (PDF, Word, الصور)\n• بحث ذكي على الإنترنت\n• إجابات إبداعية ومفيدة\n• دعم متعدد النماذج الذكية\n• نظام وكيل ذكي للمهام التلقائية\n\n🚀 **تم تطويري بواسطة المهندس محمد عبد القادر السراج** لخدمة المستخدمين العرب بكل احترافية وإبداع!",
+
+        "اشهر مزودين الكلاود منو": "🌐 **أشهر مزودي خدمات الحوسبة السحابية:**\n\n🏆 **المزودون العالميون:**\n• **Amazon Web Services (AWS)** - الرائد عالمياً\n• **Microsoft Azure** - حلول متكاملة\n• **Google Cloud Platform (GCP)** - تقنيات متقدمة\n\n🚀 **مزودون آخرون:**\n• **IBM Cloud** - حلول المؤسسات\n• **Oracle Cloud** - قواعد البيانات\n• **Alibaba Cloud** - الرائد في آسيا\n\n💡 **نصائح للاختيار:**\n• AWS للمشاريع الكبيرة\n• Azure للبيئة Microsoft\n• GCP للذكاء الاصطناعي",
+
+        "اخبار اليوم": "📰 **أخبار اليوم - النسخة الذكية**\n\n🔍 *جاري جمع أحدث الأخبار...*\n\n📊 **أهم الفئات:**\n• 📈 أخبار التكنولوجيا والذكاء الاصطناعي\n• 💼 الأخبار الاقتصادية والأسواق\n• 🌍 الأخبار العالمية\n• 🏆 الأخبار الرياضية\n\n⚡ *لتحميل أحدث الأخبار، تأكد من تفعيل مفتاح Serper API في إعدادات التطبيق*",
+
+        "ما هي أخبار اليوم": "📰 **أخبار اليوم - النسخة الذكية**\n\n🔍 *جاري جمع أحدث الأخبار...*\n\n📊 **أهم الفئات:**\n• 📈 أخبار التكنولوجيا والذكاء الاصطناعي\n• 💼 الأخبار الاقتصادية والأسواق\n• 🌍 الأخبار العالمية\n• 🏆 الأخبار الرياضية\n\n⚡ *لتحميل أحدث الأخبار، تأكد من تفعيل مفتاح Serper API في إعدادات التطبيق*"
     }
 
     # البحث عن رد مناسب
+    message_lower = message.lower()
     for key, response in fallback_responses.items():
-        if key in message.lower():
+        if key in message_lower:
+            print(f"✅ وجد رد افتراضي مخصص: {key}")
             return response
 
-    # رد عام إذا لم يتم العثور على تطابق
-    return "شكراً لسؤالك! 🤖 أنا ClainAI - مساعد ذكي عربي. حالياً، أحتاج إلى تكوين مفاتيح API للنماذج المتقدمة (جوجل Gemini، OpenAI، Claude) لتقديم إجابات أكثر دقة وإبداعية. يمكنك إضافة هذه المفاتيح في إعدادات التطبيق لتفعيل الإجابات الذكية المتقدمة! 💡"
+    # رد ذكي افتراضي محسن
+    smart_fallback = f"""🤖 **أهلاً بك في ClainAI!**
+
+سؤالك: "{message}"
+
+✨ **للحصول على إجابة ذكية ومفصلة:**
+
+1. **تفعيل النماذج الذكية:** أضف مفاتيح API في إعدادات Vercel
+2. **النماذج المدعومة:** Google Gemini, OpenAI GPT, Claude, Llama
+3. **البحث على الإنترنت:** أضف مفتاح Serper API
+
+🔧 **الإعدادات المطلوبة:**
+- `GOOGLE_API_KEY` لنموذج Gemini
+- `OPENROUTER_API_KEY` لنموذج Llama
+- `SERPER_API_KEY` للبحث على الإنترنت
+
+🚀 **مطور التطبيق:** محمد عبد القادر السراج"""
+
+    print("ℹ️ استخدام الرد الذكي الافتراضي")
+    return smart_fallback
 
 def get_smart_response(message):
     """
     الحصول على رد ذكي من أفضل نموذج متاح
     """
+    print(f"\n🎯 بدء get_smart_response للرسالة: {message}")
+    
+    # تحقق من API Keys
+    print(f"📋 حالة API Keys:")
+    print(f"  - Google: {'✅' if GOOGLE_API_KEY else '❌'} ({'مفعل' if AI_MODELS['google']['enabled'] else 'معطل'})")
+    print(f"  - OpenAI: {'✅' if OPENAI_API_KEY else '❌'} ({'مفعل' if AI_MODELS['openai']['enabled'] else 'معطل'})")
+    print(f"  - Claude: {'✅' if CLAUDE_API_KEY else '❌'} ({'مفعل' if AI_MODELS['claude']['enabled'] else 'معطل'})")
+    print(f"  - OpenRouter: {'✅' if OPENROUTER_API_KEY else '❌'} ({'مفعل' if AI_MODELS['llama']['enabled'] else 'معطل'})")
+
     enabled_models = [model_type for model_type, model in AI_MODELS.items() if model["enabled"]]
+    print(f"🎯 النماذج المفعلة: {enabled_models}")
 
     if not enabled_models:
+        print("⚠️ لا توجد نماذج مفعلة، استخدام الرد الافتراضي")
         return get_fallback_response(message), "fallback"
 
     # محاولة النماذج بالترتيب
     for model_type in enabled_models:
         try:
+            print(f"🔄 محاولة النموذج: {model_type}")
             response = get_ai_response(message, model_type)
-            if response and response != get_fallback_response(message):
+            
+            # تحقق إذا كان الرد مختلف عن الافتراضي
+            fallback_response = get_fallback_response(message)
+            if response and response != fallback_response and len(response) > 50:
+                print(f"✅ نجح النموذج: {model_type}")
                 return response, model_type
+            else:
+                print(f"❌ النموذج {model_type} فشل أو أعاد رد افتراضي")
         except Exception as e:
-            print(f"❌ فشل النموذج {model_type}: {str(e)}")
+            print(f"❌ خطأ في النموذج {model_type}: {str(e)}")
             continue
 
-    # إذا فشلت جميع النماذج
+    print("⚠️ جميع النماذج فشلت، استخدام الرد الافتراضي")
     return get_fallback_response(message), "fallback"
 
 # =============================================================================
@@ -936,7 +1076,6 @@ def logout():
 # =============================================================================
 # Routes المحادثة والملفات
 # =============================================================================
-
 @app.route("/api/chat", methods=["POST"])
 def chat():
     """المحادثة الرئيسية مع دعم الوكيل الذكي"""
@@ -979,6 +1118,7 @@ def chat():
         search_context = ""
         if use_search and SERPER_API_KEY:
             try:
+                print("🔍 جاري البحث على الإنترنت...")
                 search_url = "https://google.serper.dev/search"
                 headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
                 payload = {'q': message}
@@ -991,6 +1131,9 @@ def chat():
                         search_context = "\n\n🔍 **معلومات من البحث على الإنترنت:**\n"
                         for i, result in enumerate(top_results, 1):
                             search_context += f"{i}. **{result.get('title', '')}**: {result.get('snippet', '')}\n"
+                        print("✅ تم جمع معلومات من البحث")
+                else:
+                    print(f"❌ فشل البحث: {search_response.status_code}")
             except Exception as search_error:
                 print(f"🔍 خطأ في البحث: {search_error}")
 
@@ -1146,7 +1289,7 @@ def upload_file():
         return jsonify({'error': f'حدث خطأ في رفع الملف: {str(e)}'}), 500
 
 # =============================================================================
-# Routes البحث والأخبار
+# Routes البحث والأخبار - محسنة
 # =============================================================================
 
 @app.route("/api/search", methods=["POST"])
@@ -1161,7 +1304,11 @@ def search_web():
             return jsonify({'error': 'استعلام البحث فارغ'}), 400
 
         if not SERPER_API_KEY:
-            return jsonify({'error': 'خدمة البحث غير متاحة حالياً'}), 503
+            return jsonify({
+                'success': False,
+                'error': 'خدمة البحث غير متاحة حالياً',
+                'message': 'يرجى إضافة مفتاح Serper API في إعدادات Vercel'
+            }), 503
 
         # استخدام Serper API للبحث
         search_url = "https://google.serper.dev/search"
@@ -1218,6 +1365,7 @@ def get_news():
 
         # استخدام Serper API للأخبار
         if SERPER_API_KEY:
+            print("📰 جاري جمع الأخبار...")
             news_url = "https://google.serper.dev/news"
             headers = {
                 'X-API-KEY': SERPER_API_KEY,
@@ -1255,6 +1403,7 @@ def get_news():
 قدم تلخيصاً واضحاً ومفيداً باللغة العربية يركز على النقاط الرئيسية بطريقة إبداعية ومفصلة."""
 
                     news_summary, model_used = get_smart_response(prompt)
+                    print(f"✅ تم تلخيص الأخبار باستخدام {model_used}")
 
                 except Exception as e:
                     print(f"❌ خطأ في تلخيص الأخبار: {e}")
@@ -1272,18 +1421,35 @@ def get_news():
                     'articles': news_items,
                     'model_used': model_used
                 })
+            else:
+                print(f"❌ فشل في جلب الأخبار: {response.status_code}")
+
+        # إذا لم يكن هناك مفتاح Serper أو فشل البحث
+        fallback_news = """📰 **أخبار اليوم - النسخة الذكية**
+
+🌍 **أهم الأحداث العالمية:**
+• تطورات في تقنيات الذكاء الاصطناعي والتعلم الآلي
+• مستجدات في مجال التكنولوجيا والابتكار
+• أحداث اقتصادية وتجارية عالمية
+
+💡 **للحصول على أخبار حية ومحدثة:**
+أضف مفتاح Serper API في إعدادات Vercel لتمكين البحث المباشر عن الأخبار."""
 
         return jsonify({
             'success': True,
-            'message': 'خدمة الأخبار غير متاحة حالياً',
-            'date': datetime.now().strftime('%Y-%m-%d')
+            'query': query,
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'summary': fallback_news,
+            'articles': [],
+            'model_used': 'fallback'
         })
 
     except Exception as e:
+        print(f"❌ خطأ في جلب الأخبار: {str(e)}")
         return jsonify({'error': f'حدث خطأ في جلب الأخبار: {str(e)}'}), 500
 
 # =============================================================================
-# Routes الوكيل الذكي
+# Routes الوكيل الذكي - محسنة
 # =============================================================================
 
 @app.route("/api/agent/analyze", methods=["POST"])
@@ -1295,15 +1461,15 @@ def agent_analyze():
 
         data = request.json
         message = data.get('message', '').strip()
-        
+
         if not message:
             return jsonify({'error': 'الرسالة فارغة'}), 400
 
         user_id = session['user_id']
         agent = SmartAgent(user_id)
-        
+
         analysis = agent.analyze_intent(message)
-        
+
         return jsonify({
             'success': True,
             'analysis': analysis,
@@ -1324,7 +1490,7 @@ def get_agent_tasks():
         user_id = session['user_id']
         task_manager = TaskManager(user_id)
         tasks = task_manager.get_pending_tasks()
-        
+
         return jsonify({
             'success': True,
             'tasks': tasks,
@@ -1344,25 +1510,29 @@ def agent_track_price():
         data = request.json
         topic = data.get('topic', '').strip()
         condition = data.get('condition', '')
-        
+
         if not topic:
             return jsonify({'error': 'الموضوع مطلوب'}), 400
 
         user_id = session['user_id']
         agent = SmartAgent(user_id)
         task_id = agent.create_tracking_task(topic, condition)
-        
+
+        # الحصول على السعر الحالي
+        current_price = AgentAutomation.get_current_price(topic)
+
         # إرسال إشعار
         AgentAutomation.send_notification(
-            user_id, 
-            "🚀 بدء المتابعة", 
-            f"تم بدء متابعة {topic}. جاري جمع البيانات الأولى..."
+            user_id,
+            "🚀 بدء المتابعة",
+            f"تم بدء متابعة {topic}. {current_price}"
         )
-        
+
         return jsonify({
             'success': True,
             'task_id': task_id,
             'message': f'تم بدء متابعة {topic}',
+            'current_price': current_price,
             'notification_sent': True
         })
 
@@ -1379,18 +1549,36 @@ def agent_research():
         data = request.json
         topic = data.get('topic', '').strip()
         depth = data.get('depth', 'basic')
-        
+
         if not topic:
             return jsonify({'error': 'الموضوع مطلوب'}), 400
 
         user_id = session['user_id']
         agent = SmartAgent(user_id)
         task_id = agent.create_research_task(topic, depth)
-        
+
+        # استخدام النماذج الذكية للبحث
+        research_prompt = f"""قم بإجراء بحث شامل عن: {topic}
+
+المستوى: {depth}
+
+قدم معلومات دقيقة ومفصلة ومنظمة مع المصادر إن أمكن."""
+
+        research_result, model_used = get_smart_response(research_prompt)
+
+        # إرسال إشعار بالنتيجة
+        AgentAutomation.send_notification(
+            user_id,
+            "🔍 اكتمال البحث",
+            f"تم الانتهاء من البحث عن {topic}. تم جمع المعلومات بنجاح."
+        )
+
         return jsonify({
             'success': True,
             'task_id': task_id,
-            'message': f'تم بدء البحث عن {topic}'
+            'message': f'تم بدء البحث عن {topic}',
+            'research_result': research_result,
+            'model_used': model_used
         })
 
     except Exception as e:
@@ -1410,7 +1598,7 @@ def get_agent_notifications():
             (user_id,)
         ).fetchall()
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'notifications': [dict(notif) for notif in notifications]
@@ -1429,14 +1617,14 @@ def agent_status():
         user_id = session['user_id']
         task_manager = TaskManager(user_id)
         tasks = task_manager.get_pending_tasks()
-        
+
         conn = get_db_connection()
         notifications_count = conn.execute(
             'SELECT COUNT(*) as count FROM agent_notifications WHERE user_id = ? AND is_read = FALSE',
             (user_id,)
         ).fetchone()['count']
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'status': 'active',
@@ -1444,11 +1632,15 @@ def agent_status():
             'unread_notifications': notifications_count,
             'capabilities': [
                 "متابعة الأسعار والتغيرات",
-                "البحث التلقائي", 
+                "البحث التلقائي",
                 "الإشعارات الذكية",
                 "إدارة المهام",
                 "التعلم من التفضيلات"
-            ]
+            ],
+            'ai_models_status': {
+                model: config["enabled"] 
+                for model, config in AI_MODELS.items()
+            }
         })
 
     except Exception as e:
@@ -1542,14 +1734,16 @@ def get_models_info():
             models_info[model_type] = {
                 'name': model['name'],
                 'enabled': model['enabled'],
-                'has_key': bool(model['key'])
+                'has_key': bool(model['key']),
+                'key_length': len(model['key']) if model['key'] else 0
             }
 
         return jsonify({
             'success': True,
             'models': models_info,
             'total_models': len(models_info),
-            'enabled_models': sum(1 for model in models_info.values() if model['enabled'])
+            'enabled_models': sum(1 for model in models_info.values() if model['enabled']),
+            'setup_required': sum(1 for model in models_info.values() if not model['enabled']) > 0
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1578,5 +1772,5 @@ if __name__ == "__main__":
         print(f"🤖 AI Agent System: ✅")
         print(f"👑 Developer: محمد عبد القادر السراج - mohammedu3615@gmail.com")
         print(f"🌐 التطبيق جاهز على: http://127.0.0.1:5000")
-    
+
     app.run(host='0.0.0.0', port=5000, debug=False)
