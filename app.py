@@ -52,8 +52,8 @@ def get_base_url():
         return f"https://{vercel_git_repo_slug}.vercel.app"
 
     # Fallback إلى اسم افتراضي
-    return "https://clainai-deploy.vercel.app"
-
+# Fallback إلى اسم افتراضي
+return "https://clainai-deploy-10fa1kf6q-flutterpro2024s-projects.vercel.app"
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
 GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
