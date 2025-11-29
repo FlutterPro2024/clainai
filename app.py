@@ -51,8 +51,8 @@ def get_base_url():
     if vercel_git_repo_slug:
         return f"https://{vercel_git_repo_slug}.vercel.app"
 
-    # Fallback إلى اسم افتراضي
-    return "https://clainai-deploy-e67omvwhh-flutterpro2024s-projects.vercel.app"
+    # Fallback إلى الدومين الثابت
+    return "https://clainai-dep.vercel.app"
 
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
@@ -549,9 +549,9 @@ def guest_login():
 def github_auth():
     if not GITHUB_CLIENT_ID:
         return jsonify({'error': 'GitHub OAuth not configured'}), 500
-    
+
     github_auth_url = f"https://github.com/oauth/authorize?client_id={GITHUB_CLIENT_ID}&redirect_uri={GITHUB_REDIRECT_URI}&scope=user:email"
-    
+
     # إضافة headers علشان يتخطى الـ protection
     response = redirect(github_auth_url)
     response.headers['X-Frame-Options'] = 'ALLOWALL'
@@ -562,9 +562,9 @@ def github_auth():
 def google_auth():
     if not GOOGLE_CLIENT_ID:
         return jsonify({'error': 'Google OAuth not configured'}), 500
-    
+
     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=email profile&access_type=offline"
-    
+
     # إضافة headers علشان يتخطى الـ protection
     response = redirect(google_auth_url)
     response.headers['X-Frame-Options'] = 'ALLOWALL'
@@ -1237,6 +1237,26 @@ def get_apps():
                 'icon': '📰'
             }
         ]
+    })
+
+# =============================================================================
+# 🔧 Route جديد لفحص الإعدادات
+# =============================================================================
+
+@app.route("/api/debug")
+def debug_info():
+    """فحص إعدادات التطبيق"""
+    return jsonify({
+        "base_url": BASE_URL,
+        "github_redirect": GITHUB_REDIRECT_URI,
+        "google_redirect": GOOGLE_REDIRECT_URI,
+        "session_keys": list(session.keys()) if 'user_id' in session else "no_session",
+        "environment": {
+            "github_oauth": bool(GITHUB_CLIENT_ID),
+            "google_oauth": bool(GOOGLE_CLIENT_ID),
+            "serper_search": bool(SERPER_API_KEY),
+            "ai_models_enabled": [model for model, config in AI_MODELS.items() if config["enabled"]]
+        }
     })
 
 if __name__ == "__main__":
