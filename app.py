@@ -52,8 +52,8 @@ def get_base_url():
         return f"https://{vercel_git_repo_slug}.vercel.app"
 
     # Fallback إلى اسم افتراضي
-# Fallback إلى اسم افتراضي
-return "https://clainai-deploy-10fa1kf6q-flutterpro2024s-projects.vercel.app"
+    return "https://clainai-deploy-6pnns6l56-flutterpro2024s-projects.vercel.app"
+
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
 GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
@@ -417,7 +417,7 @@ def app_status():
         'database': 'connected',
         'base_url': BASE_URL,
         'ai_models': {
-            model: config["enabled"] 
+            model: config["enabled"]
             for model, config in AI_MODELS.items()
         },
         'oauth': {
@@ -436,7 +436,7 @@ def user_status():
             'session_active': False,
             'timestamp': datetime.now().isoformat()
         }
-        
+
         if 'user_id' in session:
             user_info['is_logged_in'] = True
             user_info['session_active'] = True
@@ -445,14 +445,14 @@ def user_status():
                 'name': session.get('user_name', 'User'),
                 'role': session.get('user_role', 'user')
             }
-        
+
         return jsonify({
             'success': True,
             'status': user_info,
             'server_time': datetime.now().isoformat(),
             'base_url': BASE_URL
         })
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
