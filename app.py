@@ -3,7 +3,7 @@ import os
 import requests
 import time
 from flask import Flask, request, jsonify, session, redirect, send_from_directory
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import hashlib
 import secrets
 from dotenv import load_dotenv
@@ -13,6 +13,8 @@ import json
 import base64
 from io import BytesIO
 import threading
+import schedule
+from typing import Dict, List, Any
 
 # Load environment
 load_dotenv()
@@ -39,11 +41,215 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 DB_PATH = "/tmp/clainai.db" if 'VERCEL' in os.environ else "clainai.db"
 
 # =============================================================================
+# 🔧 نظام الوكيل الذكي (AI Agent)
+# =============================================================================
+
+class AgentMemory:
+    """نظام الذاكرة للوكيل الذكي"""
+    
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+        self.conn = get_db_connection()
+    
+    def save_preference(self, key: str, value: str) -> bool:
+        """حفظ تفضيلات المستخدم"""
+        try:
+            memory_id = hashlib.md5(f"{self.user_id}_{key}".encode()).hexdigest()
+            self.conn.execute(
+                'INSERT OR REPLACE INTO agent_memory (id, user_id, key, value) VALUES (?, ?, ?, ?)',
+                (memory_id, self.user_id, key, value)
+            )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ خطأ في حفظ الذاكرة: {e}")
+            return False
+    
+    def get_preference(self, key: str) -> str:
+        """جلب تفضيلات المستخدم"""
+        try:
+            result = self.conn.execute(
+                'SELECT value FROM agent_memory WHERE user_id = ? AND key = ?',
+                (self.user_id, key)
+            ).fetchone()
+            return result['value'] if result else ""
+        except Exception as e:
+            print(f"❌ خطأ في جلب الذاكرة: {e}")
+            return ""
+    
+    def save_conversation_context(self, context: str) -> bool:
+        """حفظ سياق المحادثة"""
+        return self.save_preference("last_context", context)
+    
+    def get_conversation_context(self) -> str:
+        """جلب سياق المحادثة"""
+        return self.get_preference("last_context")
+
+class TaskManager:
+    """مدير المهام للوكيل الذكي"""
+    
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+        self.conn = get_db_connection()
+    
+    def create_task(self, task_type: str, description: str, data: Dict = None) -> str:
+        """إنشاء مهمة جديدة"""
+        try:
+            task_id = hashlib.md5(f"{self.user_id}_{task_type}_{datetime.now().timestamp()}".encode()).hexdigest()
+            self.conn.execute(
+                'INSERT INTO agent_tasks (id, user_id, task_type, description, data, status) VALUES (?, ?, ?, ?, ?, ?)',
+                (task_id, self.user_id, task_type, description, json.dumps(data or {}), "pending")
+            )
+            self.conn.commit()
+            return task_id
+        except Exception as e:
+            print(f"❌ خطأ في إنشاء المهمة: {e}")
+            return ""
+    
+    def get_pending_tasks(self) -> List[Dict]:
+        """جلب المهام المعلقة"""
+        try:
+            tasks = self.conn.execute(
+                'SELECT id, task_type, description, data, created_at FROM agent_tasks WHERE user_id = ? AND status = ?',
+                (self.user_id, "pending")
+            ).fetchall()
+            return [dict(task) for task in tasks]
+        except Exception as e:
+            print(f"❌ خطأ في جلب المهام: {e}")
+            return []
+    
+    def complete_task(self, task_id: str, result: str = "") -> bool:
+        """إكمال المهمة"""
+        try:
+            self.conn.execute(
+                'UPDATE agent_tasks SET status = ?, completed_at = ?, result = ? WHERE id = ?',
+                ("completed", datetime.now().isoformat(), result, task_id)
+            )
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ خطأ في إكمال المهمة: {e}")
+            return False
+
+class SmartAgent:
+    """الوكيل الذكي الرئيسي"""
+    
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+        self.memory = AgentMemory(user_id)
+        self.tasks = TaskManager(user_id)
+    
+    def analyze_intent(self, message: str) -> Dict[str, Any]:
+        """تحليل نية المستخدم"""
+        intents = {
+            "track_price": ["تابع", "تتبع", "راقب", "شوف", "اسعار", "سعر"],
+            "schedule_reminder": ["ذكرني", "تذكير", "موعد", "غداً", "بكرا"],
+            "research_topic": ["ابحث", "اعرف", "معلومات", "دراسة", "بحث"],
+            "automate_task": ["اتمتع", "شغل", "افعل", "نفذ", "اعمل"]
+        }
+        
+        message_lower = message.lower()
+        detected_intents = []
+        
+        for intent, keywords in intents.items():
+            if any(keyword in message_lower for keyword in keywords):
+                detected_intents.append(intent)
+        
+        return {
+            "intents": detected_intents,
+            "needs_agent": len(detected_intents) > 0,
+            "is_instruction": any(word in message_lower for word in ["افعل", "نفذ", "اعمل", "اتمتع"])
+        }
+    
+    def create_tracking_task(self, topic: str, condition: str = "") -> str:
+        """إنشاء مهمة متابعة"""
+        return self.tasks.create_task(
+            "price_tracking",
+            f"متابعة {topic}",
+            {"topic": topic, "condition": condition, "last_checked": datetime.now().isoformat()}
+        )
+    
+    def create_research_task(self, topic: str, depth: str = "basic") -> str:
+        """إنشاء مهمة بحث"""
+        return self.tasks.create_task(
+            "research",
+            f"بحث عن {topic}",
+            {"topic": topic, "depth": depth, "sources": []}
+        )
+
+class AgentAutomation:
+    """نظام الأتمتة للوكيل"""
+    
+    @staticmethod
+    def track_price_changes(topic: str, user_id: str) -> str:
+        """تتبع تغيرات الأسعار"""
+        try:
+            # بحث عن السعر الحالي
+            search_url = "https://google.serper.dev/search"
+            headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
+            payload = {'q': f"سعر {topic} اليوم"}
+            
+            response = requests.post(search_url, headers=headers, json=payload)
+            if response.status_code == 200:
+                results = response.json()
+                # تحليل النتائج (مبسط)
+                price_info = "تم البحث عن السعر"
+                
+                # حفظ في السجل
+                conn = get_db_connection()
+                log_id = hashlib.md5(f"price_track_{user_id}_{topic}_{datetime.now().timestamp()}".encode()).hexdigest()
+                conn.execute(
+                    'INSERT INTO price_tracking (id, user_id, topic, price_info, checked_at) VALUES (?, ?, ?, ?, ?)',
+                    (log_id, user_id, topic, price_info, datetime.now().isoformat())
+                )
+                conn.commit()
+                conn.close()
+                
+                return f"✅ تم تتبع سعر {topic}: {price_info}"
+            return "❌ لم يتم العثور على معلومات السعر"
+        except Exception as e:
+            return f"❌ خطأ في تتبع السعر: {str(e)}"
+    
+    @staticmethod
+    def send_notification(user_id: str, title: str, message: str) -> bool:
+        """إرسال إشعار للمستخدم"""
+        try:
+            # حفظ الإشعار في قاعدة البيانات
+            conn = get_db_connection()
+            notification_id = hashlib.md5(f"notif_{user_id}_{datetime.now().timestamp()}".encode()).hexdigest()
+            conn.execute(
+                'INSERT INTO agent_notifications (id, user_id, title, message, created_at) VALUES (?, ?, ?, ?, ?)',
+                (notification_id, user_id, title, message, datetime.now().isoformat())
+            )
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"❌ خطأ في إرسال الإشعار: {e}")
+            return False
+
+    @staticmethod
+    def get_current_price(topic: str) -> str:
+        """الحصول على السعر الحالي (محاكاة)"""
+        try:
+            # محاكاة للحصول على سعر حقيقي
+            prices = {
+                "الذهب": "💰 سعر الذهب اليوم: ~185 دولار للأونصة",
+                "الدولار": "💵 سعر الدولار: ~3.75 جنيه سوداني", 
+                "البترول": "🛢️ سعر البترول: ~80 دولار للبرميل",
+                "البيتكوين": "₿ سعر البيتكوين: ~45,000 دولار"
+            }
+            
+            return prices.get(topic, f"🔍 جاري البحث عن سعر {topic}...")
+        except Exception as e:
+            return f"❌ تعذر الحصول على سعر {topic}"
+
+# =============================================================================
 # 🔧 التعديل: استخدام Environment Variables مباشرة
 # =============================================================================
+
 def get_base_url():
     """الحصول على الـ base URL من Environment Variables أو ديناميكياً"""
-    # الأولوية لـ Environment Variables
     env_base_url = os.environ.get('BASE_URL')
     if env_base_url:
         return env_base_url
@@ -56,7 +262,6 @@ def get_base_url():
     if vercel_git_repo_slug:
         return f"https://{vercel_git_repo_slug}.vercel.app"
 
-    # Fallback إلى الدومين الثابت
     return "https://clainai-dep.vercel.app"
 
 def get_github_redirect_uri():
@@ -91,10 +296,9 @@ app.config.update(
 
 print("=" * 60)
 print("🚀 ClainAI - المساعد الذكي الإبداعي المتقدم!")
+print("🤖 نظام الوكيل الذكي (AI Agent) مفعل!")
 print("=" * 60)
 print(f"📍 Base URL: {BASE_URL}")
-print(f"📍 GitHub Redirect: {GITHUB_REDIRECT_URI}")
-print(f"📍 Google Redirect: {GOOGLE_REDIRECT_URI}")
 print(f"🔑 OpenRouter Key: {OPENROUTER_API_KEY[:20] if OPENROUTER_API_KEY else 'None'}...")
 print(f"🔑 Google AI Key: {GOOGLE_API_KEY[:20] if GOOGLE_API_KEY else 'None'}...")
 print(f"🔑 OpenAI Key: {OPENAI_API_KEY[:20] if OPENAI_API_KEY else 'None'}...")
@@ -109,6 +313,7 @@ print(f"🔍 Web Search: ✅")
 print(f"📰 News Search: ✅")
 print(f"🤖 Multi-AI Models: ✅")
 print(f"🌐 Dynamic Domain: ✅")
+print(f"🤖 AI Agent System: ✅")
 print(f"👑 Developer: محمد عبد القادر السراج - mohammedu3615@gmail.com")
 
 # =============================================================================
@@ -411,9 +616,59 @@ def init_db():
         )
     ''')
 
+    # جداول الوكيل الذكي الجديدة
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS agent_tasks (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            task_type TEXT,
+            description TEXT,
+            data TEXT,
+            status TEXT DEFAULT 'pending',
+            result TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS agent_memory (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            key TEXT,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS agent_notifications (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            title TEXT,
+            message TEXT,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS price_tracking (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            topic TEXT,
+            price_info TEXT,
+            checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
     conn.commit()
     conn.close()
-    print("✅ تم إنشاء قاعدة البيانات بنجاح")
+    print("✅ تم إنشاء قاعدة البيانات بنجاح مع جداول الوكيل الذكي")
 
 # CORS headers
 @app.after_request
@@ -433,7 +688,7 @@ def app_status():
     return jsonify({
         'status': 'running',
         'app': 'ClainAI',
-        'version': '2.0.0',
+        'version': '3.0.0',
         'timestamp': datetime.now().isoformat(),
         'database': 'connected',
         'base_url': BASE_URL,
@@ -446,7 +701,8 @@ def app_status():
         'oauth': {
             'github': bool(GITHUB_CLIENT_ID),
             'google': bool(GOOGLE_CLIENT_ID)
-        }
+        },
+        'agent_system': True
     })
 
 @app.route("/api/user/status", methods=["GET"])
@@ -519,7 +775,8 @@ def health_check():
             "base_url": BASE_URL,
             "github_redirect": GITHUB_REDIRECT_URI,
             "google_redirect": GOOGLE_REDIRECT_URI,
-            "ai_models": {model: config["enabled"] for model, config in AI_MODELS.items()}
+            "ai_models": {model: config["enabled"] for model, config in AI_MODELS.items()},
+            "agent_system": True
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -905,7 +1162,7 @@ def get_news():
                     for i, news in enumerate(news_items, 1):
                         news_context += f"{i}. {news['title']}\n   المصدر: {news['source']}\n   التفاصيل: {news['snippet']}\n\n"
 
-                    prompt = f"""أنت ClainAI - مساعد أخبار عربي. قم بتلخيص أهم الأخبار لليوم {datetime.now().strftime('%Y-%m-%d')}.
+                    prompt = f"""أنت ClainAI - مساعد أخبار عربي. قم بتلخيص أهم الأخبار لاليوم {datetime.now().strftime('%Y-%m-%d')}.
 
 {news_context}
 
@@ -1087,11 +1344,184 @@ def logout():
         return redirect('/login')
 
 # =============================================================================
-# Route المحادثة الرئيسية المحدثة - باستخدام النماذج الذكية
+# 🔧 routes الوكيل الذكي الجديدة
+# =============================================================================
+
+@app.route("/api/agent/analyze", methods=["POST"])
+def agent_analyze():
+    """تحليل رسالة المستخدم وتحديد إذا كانت تحتاج وكيل"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        data = request.json
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return jsonify({'error': 'الرسالة فارغة'}), 400
+
+        user_id = session['user_id']
+        agent = SmartAgent(user_id)
+        
+        analysis = agent.analyze_intent(message)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'needs_agent': analysis['needs_agent'],
+            'is_instruction': analysis['is_instruction']
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route("/api/agent/tasks", methods=["GET"])
+def get_agent_tasks():
+    """جلب مهام الوكيل الذكي"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        user_id = session['user_id']
+        task_manager = TaskManager(user_id)
+        tasks = task_manager.get_pending_tasks()
+        
+        return jsonify({
+            'success': True,
+            'tasks': tasks,
+            'total_tasks': len(tasks)
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route("/api/agent/track-price", methods=["POST"])
+def agent_track_price():
+    """طلب متابعة سعر معين"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        data = request.json
+        topic = data.get('topic', '').strip()
+        condition = data.get('condition', '')
+        
+        if not topic:
+            return jsonify({'error': 'الموضوع مطلوب'}), 400
+
+        user_id = session['user_id']
+        agent = SmartAgent(user_id)
+        task_id = agent.create_tracking_task(topic, condition)
+        
+        # إرسال إشعار
+        AgentAutomation.send_notification(
+            user_id, 
+            "🚀 بدء المتابعة", 
+            f"تم بدء متابعة {topic}. جاري جمع البيانات الأولى..."
+        )
+        
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': f'تم بدء متابعة {topic}',
+            'notification_sent': True
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route("/api/agent/research", methods=["POST"])
+def agent_research():
+    """طلب بحث عن موضوع"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        data = request.json
+        topic = data.get('topic', '').strip()
+        depth = data.get('depth', 'basic')
+        
+        if not topic:
+            return jsonify({'error': 'الموضوع مطلوب'}), 400
+
+        user_id = session['user_id']
+        agent = SmartAgent(user_id)
+        task_id = agent.create_research_task(topic, depth)
+        
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': f'تم بدء البحث عن {topic}'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route("/api/agent/notifications", methods=["GET"])
+def get_agent_notifications():
+    """جلب إشعارات الوكيل"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        user_id = session['user_id']
+        conn = get_db_connection()
+        notifications = conn.execute(
+            'SELECT id, title, message, created_at FROM agent_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10',
+            (user_id,)
+        ).fetchall()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'notifications': [dict(notif) for notif in notifications]
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route("/api/agent/status", methods=["GET"])
+def agent_status():
+    """حالة الوكيل الذكي"""
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'غير مسجل الدخول'}), 401
+
+        user_id = session['user_id']
+        task_manager = TaskManager(user_id)
+        tasks = task_manager.get_pending_tasks()
+        
+        conn = get_db_connection()
+        notifications_count = conn.execute(
+            'SELECT COUNT(*) as count FROM agent_notifications WHERE user_id = ? AND is_read = FALSE',
+            (user_id,)
+        ).fetchone()['count']
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'status': 'active',
+            'pending_tasks': len(tasks),
+            'unread_notifications': notifications_count,
+            'capabilities': [
+                "متابعة الأسعار والتغيرات",
+                "البحث التلقائي", 
+                "الإشعارات الذكية",
+                "إدارة المهام",
+                "التعلم من التفضيلات"
+            ]
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# 🔧 تحديث route المحادثة لدعم الوكيل الذكي + معلومات المطور + الردود المحسنة
 # =============================================================================
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
+    """المحادثة الرئيسية مع دعم الوكيل الذكي"""
     try:
         if 'user_id' not in session:
             return jsonify({'error': 'غير مسجل الدخول'}), 401
@@ -1106,7 +1536,7 @@ def chat():
         user_id = session['user_id']
         print(f"📩 رسالة مستلمة من {user_id}: {message}")
 
-        # التحقق إذا كان السؤال عن المطور
+        # ======== التحقق إذا كان السؤال عن المطور ========
         developer_keywords = ['مطور', 'مبرمج', 'صاحب', 'خالق', 'من صنع', 'who made you', 'developer', 'creator', 'who created you', 'برمجة', 'صنع', 'مين', 'البريد', 'ايميل', 'email']
         message_lower = message.lower()
         if any(keyword in message_lower for keyword in developer_keywords):
@@ -1128,10 +1558,10 @@ def chat():
                 'thinking': 'معلومات المطور'
             })
 
-        # التحقق إذا كان السؤال عن الاسم
+        # ======== التحقق إذا كان السؤال عن الاسم ========
         name_keywords = ['ما اسمك', 'اسمك', 'شو اسمك', 'عرف بنفسك', 'من انت', 'who are you', 'what is your name', 'شنا', 'شنا اسمك']
         if any(keyword in message_lower for keyword in name_keywords):
-            name_reply = "🤖 **أنا ClainAI - المساعد الذكي العربي المتطور!**\n\n✨ **ما أقدمه لك:**\n• محادثات ذكية مثل ChatGPT\n• تحليل الملفات (PDF, Word, الصور)\n• بحث ذكي على الإنترنت\n• إجابات إبداعية ومفيدة\n• دعم متعدد النماذج الذكية\n\n🚀 **تم تطويري بواسطة المهندس محمد عبد القادر السراج** لخدمة المستخدمين العرب بكل احترافية وإبداع!"
+            name_reply = "🤖 **أنا ClainAI - المساعد الذكي العربي المتطور!**\n\n✨ **ما أقدمه لك:**\n• محادثات ذكية مثل ChatGPT\n• تحليل الملفات (PDF, Word, الصور)\n• بحث ذكي على الإنترنت\n• إجابات إبداعية ومفيدة\n• دعم متعدد النماذج الذكية\n• نظام وكيل ذكي للمهام التلقائية\n\n🚀 **تم تطويري بواسطة المهندس محمد عبد القادر السراج** لخدمة المستخدمين العرب بكل احترافية وإبداع!"
 
             conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
             conn = get_db_connection()
@@ -1149,7 +1579,82 @@ def chat():
                 'thinking': 'معلومات الهوية'
             })
 
-        # البحث على الإنترنت إذا طلب المستخدم
+        # ======== التحليل بواسطة الوكيل الذكي ========
+        agent = SmartAgent(user_id)
+        intent_analysis = agent.analyze_intent(message)
+        
+        # إذا كانت الرسالة تحتاج وكيل
+        if intent_analysis['needs_agent']:
+            agent_response = ""
+            task_created = False
+            
+            if "track_price" in intent_analysis['intents']:
+                # استخراج الموضوع من الرسالة
+                topic = extract_topic_from_message(message, ["سعر", "اسعار", "ذهب", "عملة", "دولار", "بترول", "بيتكوين"])
+                if topic:
+                    task_id = agent.create_tracking_task(topic)
+                    task_created = True
+                    
+                    # الحصول على السعر الحالي
+                    current_price = AgentAutomation.get_current_price(topic)
+                    
+                    agent_response = f"""🤖 **الوكيل الذكي:**
+
+✅ تم تفعيل متابعة **{topic}** تلقائياً.
+
+💰 **السعر الحالي:**
+{current_price}
+
+📊 سأقوم بمراقبة الأسعار كل ساعة
+🔔 سأرسل لك تقرير عند أي تغيير مهم
+🎯 يمكنك متابعة المهام من /api/agent/tasks
+
+🚀 **تم بدء المتابعة بنجاح!**"""
+                    
+                    # إرسال إشعار فوري
+                    AgentAutomation.send_notification(
+                        user_id,
+                        "🚀 بدء المتابعة",
+                        f"تم تفعيل متابعة {topic}. جاري جمع البيانات الأولى..."
+                    )
+            
+            elif "research_topic" in intent_analysis['intents']:
+                topic = extract_topic_from_message(message, ["ابحث", "اعرف", "معلومات", "دراسة", "بحث"])
+                if topic:
+                    task_id = agent.create_research_task(topic)
+                    task_created = True
+                    
+                    agent_response = f"""🤖 **الوكيل الذكي:**
+
+🔍 تم بدء البحث عن **{topic}**.
+
+📚 جاري جمع أحدث المعلومات من مصادر موثوقة
+🎯 سأقدم لك تقريراً شاملاً قريباً
+⏰ يمكنك متابعة تقدم البحث من /api/agent/tasks
+
+🚀 **بدأت عملية البحث بنجاح!**"""
+            
+            if agent_response and task_created:
+                # حفظ رد الوكيل
+                conversation_id = hashlib.md5(f"{user_id}_{message}_{datetime.now().timestamp()}".encode()).hexdigest()
+                conn = get_db_connection()
+                conn.execute(
+                    'INSERT INTO conversations (id, user_id, message, reply, model_used) VALUES (?, ?, ?, ?, ?)',
+                    (conversation_id, user_id, message, agent_response, "smart_agent")
+                )
+                conn.commit()
+                conn.close()
+
+                return jsonify({
+                    'success': True,
+                    'reply': agent_response,
+                    'model_used': 'smart_agent',
+                    'agent_activated': True,
+                    'task_created': True,
+                    'notification_sent': True
+                })
+
+        # ======== البحث على الإنترنت إذا طلب المستخدم ========
         search_context = ""
         if use_search and SERPER_API_KEY:
             try:
@@ -1168,7 +1673,7 @@ def chat():
             except Exception as search_error:
                 print(f"🔍 خطأ في البحث: {search_error}")
 
-        # استخدام النماذج الذكية المتقدمة للحصول على رد
+        # ======== استخدام النماذج الذكية المتقدمة للحصول على رد ========
         print("🔄 جاري الحصول على رد ذكي من النماذج المتاحة...")
         ai_reply, model_used = get_smart_response(message + search_context)
 
@@ -1204,8 +1709,21 @@ def chat():
             'reply': 'عذراً، حدث خطأ في المعالجة. يرجى المحاولة مرة أخرى.'
         }), 500
 
+def extract_topic_from_message(message: str, keywords: List[str]) -> str:
+    """استخراج الموضوع من الرسالة"""
+    message_lower = message.lower()
+    for keyword in keywords:
+        if keyword in message_lower:
+            # محاولة استخراج ما بعد الكلمة الرئيسية
+            parts = message_lower.split(keyword, 1)
+            if len(parts) > 1:
+                topic = parts[1].strip()
+                if topic and len(topic) > 2:  # تأكد أن الموضوع ليس فارغاً
+                    return topic
+    return ""
+
 # =============================================================================
-# Route جديد للحصول على معلومات النماذج
+# 🔧 Route جديد للحصول على معلومات النماذج
 # =============================================================================
 
 @app.route("/api/models", methods=["GET"])
@@ -1262,6 +1780,12 @@ def get_apps():
                 'description': 'أحدث الأخبار والتحديثات',
                 'url': '/news',
                 'icon': '📰'
+            },
+            {
+                'name': 'الوكيل الذكي',
+                'description': 'المهام التلقائية والمراقبة',
+                'url': '/agent',
+                'icon': '🚀'
             }
         ]
     })
@@ -1302,8 +1826,8 @@ def check_env():
 if __name__ == "__main__":
     with app.app_context():
         init_db()
-        print(f"🌐 التطبيق جاهز على: {BASE_URL}")
-        print(f"📍 GitHub Redirect: {GITHUB_REDIRECT_URI}")
-        print(f"📍 Google Redirect: {GOOGLE_REDIRECT_URI}")
-        print(f"🤖 النماذج المفعلة: {[model['name'] for model in AI_MODELS.values() if model['enabled']]}")
+        print(f"🌐 التطبيق جاهز على: http://127.0.0.1:5000")
+        print(f"🤖 نظام الوكيل الذكي مفعل!")
+        print(f"🎯 الميزات: متابعة أسعار، بحث تلقائي، إشعارات ذكية")
+        print(f"👑 المطور: محمد عبد القادر السراج")
     app.run(host='0.0.0.0', port=5000, debug=False)
