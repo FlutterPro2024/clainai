@@ -52,7 +52,7 @@ def get_base_url():
         return f"https://{vercel_git_repo_slug}.vercel.app"
 
     # Fallback إلى اسم افتراضي
-    return "https://clainai-deploy-6pnns6l56-flutterpro2024s-projects.vercel.app"
+    return "https://clainai-deploy-e67omvwhh-flutterpro2024s-projects.vercel.app"
 
 BASE_URL = get_base_url()
 GITHUB_REDIRECT_URI = f"{BASE_URL}/api/auth/github/callback"
@@ -541,19 +541,35 @@ def guest_login():
         else:
             return redirect('/login?error=guest_login_failed')
 
+# =============================================================================
+# 🔧 OAuth Routes المعدلة مع headers لتخطي Vercel Protection
+# =============================================================================
+
 @app.route('/api/auth/github')
 def github_auth():
     if not GITHUB_CLIENT_ID:
-        return redirect('/login?error=github_not_configured')
+        return jsonify({'error': 'GitHub OAuth not configured'}), 500
+    
     github_auth_url = f"https://github.com/oauth/authorize?client_id={GITHUB_CLIENT_ID}&redirect_uri={GITHUB_REDIRECT_URI}&scope=user:email"
-    return redirect(github_auth_url)
+    
+    # إضافة headers علشان يتخطى الـ protection
+    response = redirect(github_auth_url)
+    response.headers['X-Frame-Options'] = 'ALLOWALL'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 @app.route('/api/auth/google')
 def google_auth():
     if not GOOGLE_CLIENT_ID:
-        return redirect('/login?error=google_not_configured')
+        return jsonify({'error': 'Google OAuth not configured'}), 500
+    
     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=email profile&access_type=offline"
-    return redirect(google_auth_url)
+    
+    # إضافة headers علشان يتخطى الـ protection
+    response = redirect(google_auth_url)
+    response.headers['X-Frame-Options'] = 'ALLOWALL'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 # Google OAuth Callback Route
 @app.route('/api/auth/google/callback')
