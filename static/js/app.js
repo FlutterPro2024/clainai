@@ -1,3 +1,4 @@
+// app.js - الكود المُصحح
 class ClainAIChat {
     constructor() {
         this.currentSession = {
@@ -101,7 +102,7 @@ class ClainAIChat {
 
             if (result.success) {
                 this.currentSession.hasUploadedFile = true;
-                this.showNotification(' ✅ تم رفع الملف بنجاح! يمكنك الآن السؤال عنه', 'success');
+                this.showNotification('✅ تم رفع الملف بنجاح! يمكنك الآن السؤال عنه', 'success');
                 return result;
             } else {
                 throw new Error(result.error || 'فشل في رفع الملف');
