@@ -2,7 +2,7 @@ import sqlite3
 import os
 import requests
 import time
-from flask import Flask, request, jsonify, session, redirect, send_from_directory
+from flask import Flask, request, jsonify, session, redirect, send_from_directory, send_file
 from datetime import datetime
 import hashlib
 import secrets
@@ -1141,7 +1141,7 @@ def chat():
                 search_response = requests.post(search_url, headers=headers, json=payload, timeout=15)
 
                 if search_response.status_code == 200:
-                    search_data = search_response.json()
+                    search_data = response.json()
                     if 'organic' in search_data and search_data['organic']:
                         top_results = search_data['organic'][:3]
                         search_context = "\n\n🔍 **معلومات من البحث على الإنترنت:**\n"
@@ -1217,12 +1217,12 @@ def get_history():
 
         user_id = session['user_id']
         conn = get_db_connection()
-        
+
         # تحقق إذا كان الجدول موجود
         table_exists = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'"
         ).fetchone()
-        
+
         if not table_exists:
             conn.close()
             return jsonify({
@@ -1245,7 +1245,7 @@ def get_history():
                 'timestamp': conv['created_at']
             })
             messages.append({
-                'role': 'assistant', 
+                'role': 'assistant',
                 'content': conv['reply'],
                 'timestamp': conv['created_at']
             })
@@ -1792,9 +1792,6 @@ def get_models_info():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # =============================================================================
-# تشغيل التطبيق
-# =============================================================================
-# =============================================================================
 # Route لتصحيح الجلسات - أضف هذا
 # =============================================================================
 
@@ -1809,14 +1806,12 @@ def debug_session():
             'user_name': session.get('user_name'),
             'session_permanent': session.permanent
         }
-        
+
         return jsonify({
             'success': True,
             'session': session_info,
             'cookies_received': dict(request.cookies),
-            'base_url': BASE_URL,
-            'session_cookie_name': app.session_cookie_name,
-            'session_cookie_domain': app.session_cookie_domain
+            'base_url': BASE_URL
         })
     except Exception as e:
         return jsonify({
@@ -1832,7 +1827,7 @@ def debug_login_test():
         session['user_id'] = 'test_user_123'
         session['user_name'] = 'مستخدم تجريبي'
         session['user_role'] = 'user'
-        
+
         return jsonify({
             'success': True,
             'message': 'تم تعيين جلسة تجريبية',
@@ -1844,6 +1839,11 @@ def debug_login_test():
             'success': False,
             'error': str(e)
         }), 500
+
+# =============================================================================
+# تشغيل التطبيق
+# =============================================================================
+
 if __name__ == "__main__":
     with app.app_context():
         init_db()
