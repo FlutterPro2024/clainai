@@ -1794,7 +1794,56 @@ def get_models_info():
 # =============================================================================
 # تشغيل التطبيق
 # =============================================================================
+# =============================================================================
+# Route لتصحيح الجلسات - أضف هذا
+# =============================================================================
 
+@app.route("/api/debug/session")
+def debug_session():
+    """لتصحيح مشاكل الجلسة"""
+    try:
+        session_info = {
+            'session_keys': list(session.keys()),
+            'has_user_id': 'user_id' in session,
+            'user_id': session.get('user_id'),
+            'user_name': session.get('user_name'),
+            'session_permanent': session.permanent
+        }
+        
+        return jsonify({
+            'success': True,
+            'session': session_info,
+            'cookies_received': dict(request.cookies),
+            'base_url': BASE_URL,
+            'session_cookie_name': app.session_cookie_name,
+            'session_cookie_domain': app.session_cookie_domain
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route("/api/debug/login-test")
+def debug_login_test():
+    """اختبار تسجيل الدخول"""
+    try:
+        # محاولة تسجيل دخول تجريبي
+        session['user_id'] = 'test_user_123'
+        session['user_name'] = 'مستخدم تجريبي'
+        session['user_role'] = 'user'
+        
+        return jsonify({
+            'success': True,
+            'message': 'تم تعيين جلسة تجريبية',
+            'session_set': True,
+            'user_id': session.get('user_id')
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 if __name__ == "__main__":
     with app.app_context():
         init_db()
