@@ -9,3 +9,5 @@ venv/
 *.db
 .DS_Store
 .env
+.vercel
+.env*.local

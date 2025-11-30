@@ -250,9 +250,9 @@ GOOGLE_REDIRECT_URI = f"{BASE_URL}/api/auth/google/callback"
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = SECRET_KEY
 
-# إعدادات الجلسة الآمنة
+# إعدادات الجلسة الآمنة - تم التعديل لإصلاح المشاكل
 app.config.update(
-    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SECURE=False,  # تم التغيير إلى False لإصلاح مشاكل الجلسة
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=86400,
@@ -299,7 +299,7 @@ for model, config in AI_MODELS.items():
 def test_api_connection():
     """اختبار اتصال APIs"""
     print("\n🔧 جاري اختبار اتصال APIs...")
-    
+
     # اختبار OpenRouter
     if AI_MODELS["llama"]["enabled"]:
         try:
@@ -320,7 +320,7 @@ def test_api_connection():
             print(f"  OpenRouter: {'✅' if response.status_code == 200 else '❌'} ({response.status_code})")
         except Exception as e:
             print(f"  OpenRouter: ❌ ({str(e)})")
-    
+
     # اختبار Google
     if AI_MODELS["google"]["enabled"]:
         try:
@@ -343,7 +343,7 @@ def get_ai_response(message, model_type="google"):
     """الحصول على رد ذكي من النماذج المتاحة"""
     try:
         print(f"🔄 محاولة النموذج: {model_type}")
-        
+
         if model_type == "google" and AI_MODELS["google"]["enabled"]:
             return get_google_response(message)
         elif model_type == "openai" and AI_MODELS["openai"]["enabled"]:
@@ -380,7 +380,7 @@ def get_google_response(message):
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         print(f"📥 استجابة Google: {response.status_code}")
-        
+
         if response.status_code == 200:
             result = response.json()
             if 'candidates' in result and result['candidates']:
@@ -391,7 +391,7 @@ def get_google_response(message):
                 print(f"❌ لا توجد مرشحات في الاستجابة: {result}")
         else:
             print(f"❌ خطأ Google API: {response.status_code} - {response.text}")
-            
+
         return get_fallback_response(message)
     except Exception as e:
         print(f"❌ استثناء في Google API: {str(e)}")
@@ -425,7 +425,7 @@ def get_openai_response(message):
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         print(f"📥 استجابة OpenAI: {response.status_code}")
-        
+
         if response.status_code == 200:
             result = response.json()
             response_text = result["choices"][0]["message"]["content"]
@@ -433,7 +433,7 @@ def get_openai_response(message):
             return response_text
         else:
             print(f"❌ خطأ OpenAI API: {response.status_code} - {response.text}")
-            
+
         return get_fallback_response(message)
     except Exception as e:
         print(f"❌ استثناء في OpenAI API: {str(e)}")
@@ -464,7 +464,7 @@ def get_claude_response(message):
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         print(f"📥 استجابة Claude: {response.status_code}")
-        
+
         if response.status_code == 200:
             result = response.json()
             response_text = result["content"][0]["text"]
@@ -472,7 +472,7 @@ def get_claude_response(message):
             return response_text
         else:
             print(f"❌ خطأ Claude API: {response.status_code} - {response.text}")
-            
+
         return get_fallback_response(message)
     except Exception as e:
         print(f"❌ استثناء في Claude API: {str(e)}")
@@ -508,7 +508,7 @@ def get_llama_response(message):
 
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         print(f"📥 استجابة OpenRouter: {response.status_code}")
-        
+
         if response.status_code == 200:
             result = response.json()
             response_text = result["choices"][0]["message"]["content"]
@@ -516,7 +516,7 @@ def get_llama_response(message):
             return response_text
         else:
             print(f"❌ خطأ OpenRouter API: {response.status_code} - {response.text}")
-            
+
         return get_fallback_response(message)
     except Exception as e:
         print(f"❌ استثناء في OpenRouter API: {str(e)}")
@@ -525,7 +525,7 @@ def get_llama_response(message):
 def get_fallback_response(message):
     """رد احتياطي عندما تفشل جميع النماذج"""
     print("🔄 استخدام الرد الافتراضي...")
-    
+
     fallback_responses = {
         "من هو مطورك": "🤖 **معلومات المطور:**\n\n✅ تم تطويري بواسطة **المهندس السوداني محمد عبد القادر السراج**\n🎓 **المؤهلات:**\n• خريج جامعة العلوم وتقانة المعلومات (IT)\n• خريج تكنولوجيا المعلومات والاتصالات (ICT)\n📧 **البريد الإلكتروني:** mohammedu3615@gmail.com\n\nأعمل دائماً على تطوير وتحسين أدائي لخدمة المستخدمين العرب بأفضل صورة! 💪",
 
@@ -577,7 +577,7 @@ def get_smart_response(message):
     الحصول على رد ذكي من أفضل نموذج متاح
     """
     print(f"\n🎯 بدء get_smart_response للرسالة: {message}")
-    
+
     # تحقق من API Keys
     print(f"📋 حالة API Keys:")
     print(f"  - Google: {'✅' if GOOGLE_API_KEY else '❌'} ({'مفعل' if AI_MODELS['google']['enabled'] else 'معطل'})")
@@ -597,7 +597,7 @@ def get_smart_response(message):
         try:
             print(f"🔄 محاولة النموذج: {model_type}")
             response = get_ai_response(message, model_type)
-            
+
             # تحقق إذا كان الرد مختلف عن الافتراضي
             fallback_response = get_fallback_response(message)
             if response and response != fallback_response and len(response) > 50:
@@ -864,7 +864,7 @@ def check_tables():
         return jsonify({"error": str(e)}), 500
 
 # =============================================================================
-# Routes المصادقة والمستخدمين
+# Routes المصادقة والمستخدمين - تم إصلاحها
 # =============================================================================
 
 @app.route("/api/guest-login", methods=["POST", "GET"])
@@ -892,14 +892,14 @@ def guest_login():
     except Exception as e:
         print(f"❌ خطأ في تسجيل الدخول كضيف: {str(e)}")
         if request.method == 'POST':
-            return jsonify({'error': str(e)}), 500
+            return jsonify({'success': False, 'error': str(e)}), 500
         else:
             return redirect('/login?error=guest_login_failed')
 
 @app.route('/api/auth/github')
 def github_auth():
     if not GITHUB_CLIENT_ID:
-        return jsonify({'error': 'GitHub OAuth not configured'}), 500
+        return jsonify({'success': False, 'error': 'GitHub OAuth not configured'}), 500
 
     github_auth_url = f"https://github.com/oauth/authorize?client_id={GITHUB_CLIENT_ID}&redirect_uri={GITHUB_REDIRECT_URI}&scope=user:email"
 
@@ -911,7 +911,7 @@ def github_auth():
 @app.route('/api/auth/google')
 def google_auth():
     if not GOOGLE_CLIENT_ID:
-        return jsonify({'error': 'Google OAuth not configured'}), 500
+        return jsonify({'success': False, 'error': 'Google OAuth not configured'}), 500
 
     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=email profile&access_type=offline"
 
@@ -1042,7 +1042,11 @@ def github_callback():
 def get_user():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({
+                'success': False,
+                'error': 'غير مسجل الدخول',
+                'is_logged_in': False
+            }), 401
 
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1054,16 +1058,28 @@ def get_user():
 
         if user:
             return jsonify({
-                'id': user['id'],
-                'name': user['name'],
-                'email': user['email'],
-                'role': user['role']
+                'success': True,
+                'user': {
+                    'id': user['id'],
+                    'name': user['name'],
+                    'email': user['email'],
+                    'role': user['role']
+                },
+                'is_logged_in': True
             })
         else:
-            return jsonify({'error': 'المستخدم غير موجود'}), 404
+            return jsonify({
+                'success': False,
+                'error': 'المستخدم غير موجود',
+                'is_logged_in': False
+            }), 404
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'is_logged_in': False
+        }), 500
 
 @app.route("/api/logout", methods=["POST", "GET"])
 def logout():
@@ -1081,14 +1097,14 @@ def chat():
     """المحادثة الرئيسية مع دعم الوكيل الذكي"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         message = data.get('message', '').strip()
         use_search = data.get('use_search', False)
 
         if not message:
-            return jsonify({'error': 'الرسالة فارغة'}), 400
+            return jsonify({'success': False, 'error': 'الرسالة فارغة'}), 400
 
         user_id = session['user_id']
         print(f"📩 رسالة مستلمة من {user_id}: {message}")
@@ -1168,6 +1184,7 @@ def chat():
     except Exception as e:
         print(f"❌ خطأ في المحادثة: {str(e)}")
         return jsonify({
+            'success': False,
             'error': f'حدث خطأ: {str(e)}',
             'reply': 'عذراً، حدث خطأ في المعالجة. يرجى المحاولة مرة أخرى.'
         }), 500
@@ -1176,7 +1193,7 @@ def chat():
 def clear_conversations():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1186,16 +1203,34 @@ def clear_conversations():
 
         return jsonify({'success': True, 'message': 'تم مسح المحادثة بنجاح'})
     except Exception as e:
-        return jsonify({'error': f'حدث خطأ: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': f'حدث خطأ: {str(e)}'}), 500
 
 @app.route("/api/history", methods=["GET"])
 def get_history():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({
+                'success': False,
+                'error': 'غير مسجل الدخول',
+                'messages': []
+            }), 401
 
         user_id = session['user_id']
         conn = get_db_connection()
+        
+        # تحقق إذا كان الجدول موجود
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'"
+        ).fetchone()
+        
+        if not table_exists:
+            conn.close()
+            return jsonify({
+                'success': True,
+                'messages': [],
+                'note': 'لا توجد محادثات سابقة'
+            })
+
         conversations = conn.execute(
             'SELECT message, reply, created_at FROM conversations WHERE user_id = ? ORDER BY created_at ASC',
             (user_id,)
@@ -1210,28 +1245,36 @@ def get_history():
                 'timestamp': conv['created_at']
             })
             messages.append({
-                'role': 'assistant',
+                'role': 'assistant', 
                 'content': conv['reply'],
                 'timestamp': conv['created_at']
             })
 
-        return jsonify({'messages': messages})
+        return jsonify({
+            'success': True,
+            'messages': messages,
+            'total_messages': len(messages)
+        })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'messages': []
+        }), 500
 
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         if 'file' not in request.files:
-            return jsonify({'error': 'لم يتم اختيار ملف'}), 400
+            return jsonify({'success': False, 'error': 'لم يتم اختيار ملف'}), 400
 
         file = request.files['file']
         if file.filename == '':
-            return jsonify({'error': 'لم يتم اختيار ملف'}), 400
+            return jsonify({'success': False, 'error': 'لم يتم اختيار ملف'}), 400
 
         # حفظ الملف مؤقتاً ومعالجته
         file_id = hashlib.md5(f"{session['user_id']}_{file.filename}_{datetime.now().timestamp()}".encode()).hexdigest()
@@ -1286,7 +1329,7 @@ def upload_file():
         })
 
     except Exception as e:
-        return jsonify({'error': f'حدث خطأ في رفع الملف: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': f'حدث خطأ في رفع الملف: {str(e)}'}), 500
 
 # =============================================================================
 # Routes البحث والأخبار - محسنة
@@ -1296,12 +1339,12 @@ def upload_file():
 def search_web():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         query = data.get('query', '').strip()
         if not query:
-            return jsonify({'error': 'استعلام البحث فارغ'}), 400
+            return jsonify({'success': False, 'error': 'استعلام البحث فارغ'}), 400
 
         if not SERPER_API_KEY:
             return jsonify({
@@ -1320,7 +1363,7 @@ def search_web():
 
         response = requests.post(search_url, headers=headers, json=payload)
         if response.status_code != 200:
-            return jsonify({'error': 'فشل في البحث'}), 500
+            return jsonify({'success': False, 'error': 'فشل في البحث'}), 500
 
         search_results = response.json()
 
@@ -1352,13 +1395,13 @@ def search_web():
         })
 
     except Exception as e:
-        return jsonify({'error': f'حدث خطأ في البحث: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': f'حدث خطأ في البحث: {str(e)}'}), 500
 
 @app.route("/api/news", methods=["POST"])
 def get_news():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         query = data.get('query', 'أخبار اليوم')
@@ -1446,7 +1489,7 @@ def get_news():
 
     except Exception as e:
         print(f"❌ خطأ في جلب الأخبار: {str(e)}")
-        return jsonify({'error': f'حدث خطأ في جلب الأخبار: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': f'حدث خطأ في جلب الأخبار: {str(e)}'}), 500
 
 # =============================================================================
 # Routes الوكيل الذكي - محسنة
@@ -1457,13 +1500,13 @@ def agent_analyze():
     """تحليل رسالة المستخدم وتحديد إذا كانت تحتاج وكيل"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         message = data.get('message', '').strip()
 
         if not message:
-            return jsonify({'error': 'الرسالة فارغة'}), 400
+            return jsonify({'success': False, 'error': 'الرسالة فارغة'}), 400
 
         user_id = session['user_id']
         agent = SmartAgent(user_id)
@@ -1478,14 +1521,14 @@ def agent_analyze():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/agent/tasks", methods=["GET"])
 def get_agent_tasks():
     """جلب مهام الوكيل الذكي"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         user_id = session['user_id']
         task_manager = TaskManager(user_id)
@@ -1498,21 +1541,21 @@ def get_agent_tasks():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/agent/track-price", methods=["POST"])
 def agent_track_price():
     """طلب متابعة سعر معين"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         topic = data.get('topic', '').strip()
         condition = data.get('condition', '')
 
         if not topic:
-            return jsonify({'error': 'الموضوع مطلوب'}), 400
+            return jsonify({'success': False, 'error': 'الموضوع مطلوب'}), 400
 
         user_id = session['user_id']
         agent = SmartAgent(user_id)
@@ -1537,21 +1580,21 @@ def agent_track_price():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/agent/research", methods=["POST"])
 def agent_research():
     """طلب بحث عن موضوع"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         topic = data.get('topic', '').strip()
         depth = data.get('depth', 'basic')
 
         if not topic:
-            return jsonify({'error': 'الموضوع مطلوب'}), 400
+            return jsonify({'success': False, 'error': 'الموضوع مطلوب'}), 400
 
         user_id = session['user_id']
         agent = SmartAgent(user_id)
@@ -1582,14 +1625,14 @@ def agent_research():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/agent/notifications", methods=["GET"])
 def get_agent_notifications():
     """جلب إشعارات الوكيل"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         user_id = session['user_id']
         conn = get_db_connection()
@@ -1605,14 +1648,14 @@ def get_agent_notifications():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/agent/status", methods=["GET"])
 def agent_status():
     """حالة الوكيل الذكي"""
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         user_id = session['user_id']
         task_manager = TaskManager(user_id)
@@ -1638,13 +1681,13 @@ def agent_status():
                 "التعلم من التفضيلات"
             ],
             'ai_models_status': {
-                model: config["enabled"] 
+                model: config["enabled"]
                 for model, config in AI_MODELS.items()
             }
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =============================================================================
 # Routes إضافية
@@ -1673,7 +1716,7 @@ def get_current_date():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def get_hijri_date():
     try:
@@ -1701,14 +1744,14 @@ def get_hijri_date():
 def save_location():
     try:
         if 'user_id' not in session:
-            return jsonify({'error': 'غير مسجل الدخول'}), 401
+            return jsonify({'success': False, 'error': 'غير مسجل الدخول'}), 401
 
         data = request.json
         lat = data.get('lat')
         lng = data.get('lng')
 
         if not lat or not lng:
-            return jsonify({'error': 'إحداثيات الموقع مطلوبة'}), 400
+            return jsonify({'success': False, 'error': 'إحداثيات الموقع مطلوبة'}), 400
 
         # حفظ الموقع في قاعدة البيانات
         location_id = hashlib.md5(f"{session['user_id']}_{lat}_{lng}_{datetime.now().timestamp()}".encode()).hexdigest()
@@ -1723,7 +1766,7 @@ def save_location():
         return jsonify({'success': True, 'message': 'تم حفظ الموقع'})
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/models", methods=["GET"])
 def get_models_info():
@@ -1746,7 +1789,7 @@ def get_models_info():
             'setup_required': sum(1 for model in models_info.values() if not model['enabled']) > 0
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =============================================================================
 # تشغيل التطبيق
